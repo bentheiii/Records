@@ -1,28 +1,22 @@
 .DEFAULT_GOAL := all
-isort = python3 -m isort -rc app tests
-black = python3 -m black -S -l 120 --target-version py38 app tests
+isort = python -m isort records tests
+
+.PHONY: format
+format:
+	$(isort)
 
 .PHONY: lint
 lint:
-	python3 -m flake8 app/ tests/
+	python -m flake8 records/ tests/
 	$(isort) --check-only
-	$(black) --check
-.PHONY: mypy
-mypy:
-	python3 -m mypy app
 
 .PHONY: test
 test:
-	pytest -x --cov=app
-
-.PHONY: testcov
-testcov: test
-	@echo "building coverage html"
-	@coverage html
+	python -m pytest -x --cov=records --cov-report term-missing
 
 
 .PHONY: all
-all: lint mypy testcov
+all: format lint test
 
 .PHONY: clean
 clean:
