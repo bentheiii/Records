@@ -1,23 +1,31 @@
-import sys
+from __future__ import annotations
 
 from inspect import getattr_static
-from operator import attrgetter
-from typing import AbstractSet, Any, ClassVar, Dict, Literal, Union, get_type_hints
+from typing import AbstractSet, Any, ClassVar, Dict, Literal, Type, Union
 
-if sys.version_info >= (3, 8, 0):
-    from typing import get_origin, get_args
-else:
-    get_origin = attrgetter('__origin__')
-    get_args = attrgetter('__args__')  # todo callable needs special case
-
-if sys.version_info >= (3, 9, 0):
-    from typing import Annotated
-else:
-    Annotated = None
+from records.utils.typing_compatible import (Annotated, get_origin,
+                                             get_type_hints)
 
 UNKNOWN_NAME = object()
 NO_DEFAULT = object()
 NO_ARG = object()
+
+
+class ParamStorage:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+class Check(ParamStorage):
+    pass
+
+
+class Coerce(ParamStorage):
+    pass
+
+
+class Pass:
+    pass
 
 
 class SkipField(Exception):
@@ -25,40 +33,27 @@ class SkipField(Exception):
 
 
 class RecordField:
-    def __init__(self, stored_type):
+    def __init__(self, stored_type, *, owner, name, default):
         self.stored_type = stored_type
-        self.name = UNKNOWN_NAME
-        self.default = NO_DEFAULT
+        self.name = name
+        self.default = default
+        self.owner: Type[RecordBase] = owner
+        self.validate_default = True
+        self._validator = None
 
-    def set_default_value(self, v):
-        if self.default is not NO_DEFAULT:  # pragma: no cover
-            raise Exception('field already has a default')
-        self.default = v
-
-    def set_name(self, v):
-        if self.name is not UNKNOWN_NAME:  # pragma: no cover
-            raise Exception('field already has a name')
-        self.name = v
+    def validator(self):
+        if self._validator:
+            return
 
     @classmethod
-    def from_type_hint(cls, th):
-        def multi(args):
-            first, *tail = args
-            ret = cls.from_type_hint(first)
-            for t in tail:
-                ret.apply(t)
-            return ret
-
+    def from_type_hint(cls, th, **kwargs) -> RecordField:
         if isinstance(th, type) or th in (Any,):
-            return cls(th)
+            return cls(th, **kwargs)
         origin = get_origin(th)
         if origin == ClassVar:
             raise SkipField
-        if Annotated and origin == Annotated:
-            return multi(get_args(th))
-        if isinstance(origin, type) or origin in (Union, Literal):
-            return cls(th)
-        # todo Annotated, Any
+        if isinstance(origin, type) or origin in (Union, Literal, Annotated):
+            return cls(th, **kwargs)
         raise TypeError(type(th))
 
 
@@ -72,22 +67,20 @@ class RecordBase:
     def __init_subclass__(cls, *, frozen: bool = False, **kwargs):
         super().__init_subclass__(**kwargs)
 
+        cls._frozen = frozen
         cls._fields = {}
         for name, type_hint in get_type_hints(cls).items():
             try:
-                field = RecordField.from_type_hint(type_hint)
+                field = RecordField.from_type_hint(type_hint,
+                                                   owner=cls, name=name,
+                                                   default=getattr_static(cls, name, NO_DEFAULT))
             except SkipField:
                 pass
             else:
-                field.set_name(name)
-                default = getattr_static(cls, name, NO_DEFAULT)
-                if default is not NO_DEFAULT:
-                    field.set_default_value(default)
                 cls._fields[name] = field
                 setattr(cls, name, field)
 
         cls._required_keys = {k for (k, f) in cls._fields.items() if f.default is NO_DEFAULT}
-        cls._frozen = frozen
         if frozen:
             def __setattr__(s, a, value):
                 if a in RecordBase.__slots__:
