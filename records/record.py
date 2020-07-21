@@ -32,18 +32,42 @@ class SkipField(Exception):
     pass
 
 
+class Factory:
+    def __init__(self, func):
+        self.func = func
+
+
+class DefaultValue:
+    def __init__(self, value):
+        self.value = value
+
+
 class RecordField:
+    AUTO_FACTORY_TYPES = (dict, list, set)
+
     def __init__(self, stored_type, *, owner, name, default):
         self.stored_type = stored_type
         self.name = name
-        self.default = default
-        self.owner: Type[RecordBase] = owner
-        self.validate_default = True
-        self._validator = None
+        default, is_factory = self._apply_factory(default)
 
-    def validator(self):
-        if self._validator:
-            return
+        self.default = default
+        self.default_is_factory = is_factory
+        self.owner: Type[RecordBase] = owner
+
+    def make_default(self):
+        if self.default_is_factory:
+            return self.default()
+        return self.default
+
+    @classmethod
+    def _apply_factory(cls, default):
+        if isinstance(default, DefaultValue):
+            return default.value, False
+        if isinstance(default, Factory):
+            return default.func, True
+        if isinstance(default, cls.AUTO_FACTORY_TYPES):
+            return default.copy, True
+        return default, False
 
     @classmethod
     def from_type_hint(cls, th, **kwargs) -> RecordField:
@@ -62,6 +86,7 @@ class RecordBase:
 
     _fields: ClassVar[Dict[str, RecordField]]
     _required_keys: ClassVar[AbstractSet[str]]
+    _optional_keys: ClassVar[AbstractSet[str]]
     _frozen: ClassVar[bool]
 
     def __init_subclass__(cls, *, frozen: bool = False, **kwargs):
@@ -81,6 +106,7 @@ class RecordBase:
                 setattr(cls, name, field)
 
         cls._required_keys = {k for (k, f) in cls._fields.items() if f.default is NO_DEFAULT}
+        cls._optional_keys = {k for k in cls._fields if k not in cls._required_keys}
         if frozen:
             def __setattr__(s, a, value):
                 if a in RecordBase.__slots__:
@@ -91,6 +117,10 @@ class RecordBase:
         else:
             cls.__hash__ = None
 
+        cls_post_init = getattr(cls, 'cls_post_init', None)
+        if cls_post_init:
+            cls_post_init()
+
     def __new__(cls, arg=NO_ARG, **kwargs):
         if arg is not NO_ARG:
             if len(cls._required_keys) != 1:
@@ -99,16 +129,21 @@ class RecordBase:
             if arg_key in kwargs:
                 raise TypeError(f'duplicate {arg_key}')
             kwargs[arg_key] = arg
-        values = {name: field.default for (name, field) in cls._fields.items()}
+
+        values = {}
         required = set(cls._required_keys)
+        optional = set(cls._optional_keys)
         for k, v in kwargs.items():
             required.discard(k)
-            if k not in values:
+            optional.discard(k)
+            if k not in cls._fields:
                 raise TypeError(f'argument {k} invalid for type {cls.__qualname__}')
             values[k] = v
 
         if required:
             raise TypeError(f'missing required arguments: {tuple(required)}')
+        for k in optional:
+            values[k] = cls._fields[k].make_default()
 
         self = super().__new__(cls)
         d = self.__dict__
