@@ -1,9 +1,9 @@
 from math import isclose
-from typing import Hashable, List, Set, Dict
+from typing import Dict, Hashable, List, Set
 
 from pytest import fixture, mark, raises, skip
 
-from records import Factory, RecordBase, DefaultValue
+from records import DefaultValue, Factory, RecordBase
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])

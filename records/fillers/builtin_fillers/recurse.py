@@ -1,0 +1,2 @@
+class GetFiller(Exception):
+    pass

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := all
-isort = python -m isort records tests
+isort = python -m isort -l 120 records tests
 
 .PHONY: format
 format:
@@ -12,7 +12,7 @@ lint:
 
 .PHONY: test
 test:
-	python -m pytest -x --cov=records --cov-report term-missing
+	python -m pytest tests/unittests/ -x --cov=records --cov-report term-missing
 
 
 .PHONY: all

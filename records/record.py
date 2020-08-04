@@ -1,27 +1,20 @@
 from __future__ import annotations
 
 from inspect import getattr_static
-from typing import AbstractSet, Any, ClassVar, Dict, Literal, Type, Union
+from typing import AbstractSet, ClassVar, Dict, Type
 
-from records.utils.typing_compatible import (Annotated, get_origin,
-                                             get_type_hints)
+from records.fillers.filler import TypeCheckStyle
+from records.fillers.get_filler import get_filler
+from records.utils.typing_compatible import get_args, get_origin, get_type_hints
 
 UNKNOWN_NAME = object()
 NO_DEFAULT = object()
 NO_ARG = object()
 
-
-class ParamStorage:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-
-
-class Check(ParamStorage):
-    pass
-
-
-class Coerce(ParamStorage):
-    pass
+try:
+    from typing import Final
+except ImportError:  # pragma: no cover
+    Final = object()
 
 
 class Pass:
@@ -45,8 +38,8 @@ class DefaultValue:
 class RecordField:
     AUTO_FACTORY_TYPES = (dict, list, set)
 
-    def __init__(self, stored_type, *, owner, name, default):
-        self.stored_type = stored_type
+    def __init__(self, *, filler, owner, name, default):
+        self.filler = filler
         self.name = name
         default, is_factory = self._apply_factory(default)
 
@@ -70,15 +63,18 @@ class RecordField:
         return default, False
 
     @classmethod
-    def from_type_hint(cls, th, **kwargs) -> RecordField:
-        if isinstance(th, type) or th in (Any,):
-            return cls(th, **kwargs)
+    def from_type_hint(cls, th, *, owner, **kwargs) -> RecordField:
+        if th is Final:
+            raise TypeError('raw Final cannot be use inside records')
         origin = get_origin(th)
         if origin == ClassVar:
             raise SkipField
-        if isinstance(origin, type) or origin in (Union, Literal, Annotated):
-            return cls(th, **kwargs)
-        raise TypeError(type(th))
+        if origin == Final:
+            if not owner.is_frozen():
+                raise TypeError('cannot declare Final field in non-frozen Record')
+            return cls.from_type_hint(get_args(th)[0], owner=owner, **kwargs)
+        filler = get_filler(th)
+        return cls(filler=filler, owner=owner, **kwargs)
 
 
 class RecordBase:
@@ -87,12 +83,14 @@ class RecordBase:
     _fields: ClassVar[Dict[str, RecordField]]
     _required_keys: ClassVar[AbstractSet[str]]
     _optional_keys: ClassVar[AbstractSet[str]]
+    _default_type_check_style: ClassVar[TypeCheckStyle]
     _frozen: ClassVar[bool]
 
-    def __init_subclass__(cls, *, frozen: bool = False, **kwargs):
+    def __init_subclass__(cls, *, frozen: bool = False, default_type_check=TypeCheckStyle.hollow, **kwargs):
         super().__init_subclass__(**kwargs)
 
         cls._frozen = frozen
+        cls._default_type_check_style = default_type_check
         cls._fields = {}
         for name, type_hint in get_type_hints(cls).items():
             try:
@@ -121,6 +119,9 @@ class RecordBase:
         if cls_post_init:
             cls_post_init()
 
+        for field in cls._fields.values():
+            field.filler.bind(cls)
+
     def __new__(cls, arg=NO_ARG, **kwargs):
         if arg is not NO_ARG:
             if len(cls._required_keys) != 1:
@@ -136,9 +137,10 @@ class RecordBase:
         for k, v in kwargs.items():
             required.discard(k)
             optional.discard(k)
-            if k not in cls._fields:
+            field = cls._fields.get(k)
+            if not field:
                 raise TypeError(f'argument {k} invalid for type {cls.__qualname__}')
-            values[k] = v
+            values[k] = field.filler(v)
 
         if required:
             raise TypeError(f'missing required arguments: {tuple(required)}')
@@ -182,6 +184,10 @@ class RecordBase:
     @classmethod
     def is_frozen(cls):
         return cls._frozen
+
+    @classmethod
+    def default_type_check_style(cls):
+        return cls._default_type_check_style
 
     def __hash__(self):
         if self._hash is None:

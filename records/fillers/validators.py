@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, Callable, Mapping, Optional
+from typing import Callable, Generic, Mapping, Optional, TypeVar
 
 
 class ValidationToken:
@@ -20,7 +20,7 @@ class ValidatorFunction(ValidationToken, Generic[T]):
 class MapValidation(ValidationToken, Generic[T]):
     def __init__(self, value_map: Optional[Mapping[T, T]] = None,
                  factory_map: Optional[Mapping[T, Callable[[], T]]] = None,
-                 pass_missing = True):
+                 pass_missing=True):
         self.value_map = value_map or {}
         self.factory_map = factory_map or {}
         self.pass_missing = pass_missing

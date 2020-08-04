@@ -1,4 +1,5 @@
-from typing import Callable, Any, TypeVar, Generic, Optional, Mapping
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Generic, Mapping, Optional, TypeVar, Type
 
 
 class CoercionToken:
@@ -8,25 +9,53 @@ class CoercionToken:
 T = TypeVar('T')
 
 
-class CoercerFunction(CoercionToken, Generic[T]):
+class GlobalCoercionToken(CoercionToken, ABC):
+    @abstractmethod
+    def __call__(self, stored_type: Type[T], filler) -> Callable[[Any], T]:
+        pass
+
+
+class CoercerFunction(GlobalCoercionToken, Generic[T]):
     def __init__(self, func: Callable[..., T], *args, **kwargs):
         self.func = func
         self.args = args
         self.kwargs = kwargs
 
-    def __call__(self, v):
+    def inner(self, v):
         return self.func(v, *self.args, **self.kwargs)
 
+    def __call__(self, *_):
+        return self.inner
 
-class MapCoercion(CoercionToken, Generic[T]):
+
+class MapCoercion(GlobalCoercionToken, Generic[T]):
     def __init__(self, value_map: Optional[Mapping[Any, T]] = None,
                  factory_map: Optional[Mapping[Any, Callable[[], T]]] = None):
         self.value_map = value_map or {}
         self.factory_map = factory_map or {}
 
-    def __call__(self, v):
+    def inner(self, v):
         if v in self.value_map:
             return self.value_map[v]
         if v in self.factory_map:
             return self.factory_map[v]()
         raise TypeError
+
+    def __call__(self, *_):
+        return self.inner
+
+
+class ComposeCoercer(GlobalCoercionToken):
+    def __init__(self, *inner_coercers: CoercionToken):
+        self.inner_coercers = inner_coercers
+
+    def __call__(self, cls, filler):
+        functors = [filler.get_coercer(t) for t in self.inner_coercers]
+        functors.reverse()
+
+        def ret(v):
+            for f in functors:
+                v = f(v)
+            return v
+
+        return ret

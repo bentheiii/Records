@@ -1,144 +1,150 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from functools import partial
+from inspect import isabstract
 from math import isclose
 from numbers import Rational, Real
 from operator import index
-from typing import Generic, TypeVar, Callable, Type, Tuple, Dict, Any
+from typing import Any, Callable, Dict, Generic, Tuple, Type, TypeVar
 
-from records.fillers.filler import AnnotatedFiller, CoercionToken
+from records.fillers.coercers import CoercionToken, GlobalCoercionToken
+from records.fillers.filler import AnnotatedFiller, TypeCheckStyle
 
 T = TypeVar('T')
 
 
-class KwCoercionToken(CoercionToken, Generic[T]):
+class Eval(GlobalCoercionToken):
     def __init__(self, *args, **kwargs):
-        self.args = args
         self.kwargs = kwargs
+        self.kwargs.update(
+            (k.__name__, k) for k in args
+        )
 
-    @abstractmethod
-    def get_base(self, origin: Type[T]) -> Callable[..., T]:
-        pass
-
-
-class Eval(KwCoercionToken[T], Generic[T]):
-    def get_base(self, origin) -> Callable[..., T]:
+    def __call__(self, origin, filler):
         def ret(v):
             if not isinstance(v, str):
                 raise TypeError
             try:
-                ret = eval(v, {'__builtins__': {}})
+                ret = eval(v, {'__builtins__': self.kwargs})
             except Exception as e:
                 raise TypeError from e
-
-            if type(ret) is not origin:
-                raise TypeError
 
             return ret
 
         return ret
 
 
-class Loose(KwCoercionToken[T], Generic[T]):
-    def get_base(self, origin) -> Callable[..., T]:
-        return origin
+class OriginDependant(GlobalCoercionToken, ABC):
+    @abstractmethod
+    def func(self, origin, v):
+        pass
+
+    def __call__(self, origin, filler):
+        return partial(self.func, origin)
 
 
-class LooseUnpack(KwCoercionToken[T], Generic[T]):
-    def get_base(self, origin: Type[T]) -> Callable[..., T]:
-        def ret(v, *args, **kwargs):
-            return origin(*v, *args, **kwargs)
+class ArgsOriginDependant(OriginDependant, ABC):
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
 
-        return ret
+    @staticmethod
+    @abstractmethod
+    def func_args(origin, v, args, kwargs):
+        pass
+
+    def func(self, origin, v):
+        return self.func_args(origin, v, self.args, self.kwargs)
 
 
-class LooseUnpackMap(KwCoercionToken[T], Generic[T]):
-    def get_base(self, origin: Type[T]) -> Callable[..., T]:
-        def ret(v, *args, **kwargs):
-            return origin(**v, *args, **kwargs)
+class LooseMixin(Callable):
+    def __call__(self, origin):
+        if isabstract(origin):
+            raise TypeError('cannot use loose coercer with abstract type')
+        return super().__call__(origin)
 
-        return ret
+
+class Loose(ArgsOriginDependant, LooseMixin):
+    @staticmethod
+    def func_args(origin, v, args, kwargs):
+        return origin(v, *args, **kwargs)
+
+
+class LooseUnpack(ArgsOriginDependant, LooseMixin):
+    @staticmethod
+    def func_args(origin, v, args, kwargs):
+        return origin(*v, *args, **kwargs)
+
+
+class LooseUnpackMap(ArgsOriginDependant, LooseMixin):
+    @staticmethod
+    def func_args(origin, v, args, kwargs):
+        return origin(*args, **v, **kwargs)
 
 
 class SimpleFiller(AnnotatedFiller[T], Generic[T]):
-    PARTIAL_COERCER_TYPES: Tuple[Type[KwCoercionToken], ...] = Eval, Loose, LooseUnpack, LooseUnpackMap
-
     def type_check_strict(self, v) -> bool:
         return type(v) == self.origin
 
     def type_check(self, v) -> bool:
         return isinstance(v, self.origin)
 
-    def get_coercer(self, token):
-        if isinstance(token, self.PARTIAL_COERCER_TYPES):
-            token: KwCoercionToken
-            base = token.get_base(self.origin)
-            if token.args or token.kwargs:
-                return partial(base, *token.args, **token.kwargs)
-            return base
-        return super().get_coercer(token)
+    def bind(self, owner_cls):
+        super().bind(owner_cls)
+
+        if self.type_checking_style == TypeCheckStyle.check_strict and isabstract(self.origin):
+            raise TypeError(f'cannot create strict checker for abstract class {self.origin}')
 
 
-class Index(KwCoercionToken[int]):
-    def get_base(self, origin) -> Callable[..., T]:
-        return index
-
-
-class Whole(KwCoercionToken[int]):
-    def get_base(self, origin) -> Callable[..., T]:
-        def ret(v, *args, **kwargs):
-            if isinstance(v, Rational):
-                if v.denominator == 1:
-                    return origin(v, *args, **kwargs)
-            elif isinstance(v, Real):
-                mod = v % 1
-                if isclose(mod, 0) or isclose(mod, 1):
-                    return origin(v, *args, **kwargs)
-            raise TypeError
-
-        return ret
-
-
-class FromBytes(KwCoercionToken[T], Generic[T]):
-    def get_base(self, origin) -> Callable[..., T]:
-        return origin.from_bytes
-
-
-class IntFiller(SimpleFiller[int]):
-    PARTIAL_COERCER_TYPES = *SimpleFiller.PARTIAL_COERCER_TYPES, Index, Whole, FromBytes
-
-
-class FromInteger(SimpleFiller[T], Generic[T]):
+class Whole(ArgsOriginDependant):
     @staticmethod
-    def _bool(v):
+    def func_args(origin, v, args, kwargs):
+        if isinstance(v, Rational):
+            if v.denominator == 1:
+                return origin(v.numerator, *args, **kwargs)
+        elif isinstance(v, Real):
+            mod = v % 1
+            if isclose(mod, 0) or isclose(mod, 1):
+                return origin(v, *args, **kwargs)
+        raise TypeError
+
+
+class FromBytes(ArgsOriginDependant):
+    @staticmethod
+    def func_args(origin, v, args, kwargs):
+        return origin.from_bytes(v, *args, **kwargs)
+
+
+class ToBytes(ArgsOriginDependant):
+    @staticmethod
+    def func_args(origin, v, args, kwargs):
+        return origin(v.to_bytes(*args, **kwargs))
+
+
+class FromInteger(CoercionToken):
+    pass
+
+
+class BoolFiller(SimpleFiller[bool]):
+    @staticmethod
+    def _bool_from_int(v):
         if v == 0:
             return False
         if v == 1:
             return True
         raise TypeError
 
-    def get_base(self, origin) -> Callable[..., T]:
-        if issubclass(origin, bool):
-            return self._bool
-        if issubclass(origin, (bytes, bytearray)):
-            def _bytes(v, *args, **kwargs):
-                return origin(v.to_bytes(*args, **kwargs))
-
-            return _bytes
-        raise ValueError(origin)
+    def get_coercer(self, token):
+        if isinstance(token, FromInteger):
+            return self._bool_from_int
+        return super().get_coercer(token)
 
 
-class BoolFiller(SimpleFiller[bool]):
-    PARTIAL_COERCER_TYPES = *SimpleFiller.PARTIAL_COERCER_TYPES, FromInteger
-
-
-class FromFalsish(SimpleFiller[T], Generic[T]):
-    def get_base(self, origin) -> Callable[..., T]:
-        def ret(v, *args, **kwargs):
-            if not v:
-                return origin(*args, **kwargs)
-            raise TypeError
-
-        return ret
+class SingletonFromFalsish(ArgsOriginDependant):
+    @staticmethod
+    def func_args(origin, v, args, kwargs):
+        if not v:
+            return origin(*args, **kwargs)
+        raise TypeError
 
 
 class NoneFiller(SimpleFiller[None]):
@@ -147,35 +153,40 @@ class NoneFiller(SimpleFiller[None]):
 
     type_check_strict = type_check
 
-    PARTIAL_COERCER_TYPES = *SimpleFiller.PARTIAL_COERCER_TYPES, FromFalsish
+
+class EllipsisFiller(SimpleFiller[type(...)]):
+    def type_check(self, v) -> bool:
+        return v is ...
+
+    type_check_strict = type_check
 
 
-class Encoding(Loose[T], Generic[T]):
+class Encoding(Loose):
     def __init__(self, encoding, **kwargs):
         super().__init__(encoding=encoding, **kwargs)
 
 
-class StrFiller(SimpleFiller[str]):
-    PARTIAL_COERCER_TYPES = *SimpleFiller.PARTIAL_COERCER_TYPES, Encoding
-
-
-class BytesFiller(SimpleFiller[bytes]):
-    PARTIAL_COERCER_TYPES = *SimpleFiller.PARTIAL_COERCER_TYPES, Encoding
-
-
 class CallableFiller(AnnotatedFiller[Callable]):
-    type_check = type_check_strict = callable
+    type_check = type_check_strict = staticmethod(callable)
 
 
-std_fillers: Dict[Any, Type[AnnotatedFiller]] = {
-    int: IntFiller,
+std_filler_map: Dict[Any, Type[AnnotatedFiller]] = {
     bool: BoolFiller,
-    str: StrFiller,
-    bytes: BytesFiller,
-    callable: CallableFiller,
-    None: NoneFiller,
+    type(None): NoneFiller,
+    object: SimpleFiller,
+    type(...): EllipsisFiller
 }
-std_fillers[type(None)] = std_fillers[None]
 
-for t in (complex, list, tuple, set, frozenset, range, slice, Exception, type, dict):
-    std_fillers[t] = SimpleFiller
+std_filler_checkers = []
+
+
+@std_filler_checkers.append
+def callable_checker(stored_type):
+    if stored_type is callable:
+        return CallableFiller
+
+
+@std_filler_checkers.append
+def none_checker(stored_type):
+    if stored_type is None:
+        return NoneFiller
