@@ -1,6 +1,6 @@
 import sys
 from functools import partial
-from typing import get_type_hints
+from typing import get_type_hints, Callable
 
 if sys.version_info >= (3, 8, 0):  # pragma: no cover
     from typing import get_args, get_origin
@@ -42,6 +42,8 @@ else:  # pragma: no cover
             return _origins(v) or getattr(v, '__origin__', None)
 
         def get_args(v):
+            if v is Callable:
+                return ()
             return _args(v) or getattr(v, '__args__', None)
 
 __all__ = ['get_args', 'get_origin', 'Annotated', 'get_type_hints', 'is_annotation']

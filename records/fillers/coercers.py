@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Generic, Mapping, Optional, TypeVar, Type
+from typing import Any, Callable, Generic, Mapping, Optional, TypeVar, Type, Union
 
 
 class CoercionToken:
@@ -15,7 +15,7 @@ class GlobalCoercionToken(CoercionToken, ABC):
         pass
 
 
-class CoercerFunction(GlobalCoercionToken, Generic[T]):
+class CallCoercion(GlobalCoercionToken, Generic[T]):
     def __init__(self, func: Callable[..., T], *args, **kwargs):
         self.func = func
         self.args = args
@@ -46,7 +46,7 @@ class MapCoercion(GlobalCoercionToken, Generic[T]):
 
 
 class ComposeCoercer(GlobalCoercionToken):
-    def __init__(self, *inner_coercers: CoercionToken):
+    def __init__(self, *inner_coercers: Union[Type[CoercionToken], CoercionToken]):
         self.inner_coercers = inner_coercers
 
     def __call__(self, cls, filler):

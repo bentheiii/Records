@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Dict, Iterable, List, Literal, Mapping, Sequence, Tuple, Type, Union
+from typing import Dict, Iterable, List, Literal, Mapping, Sequence, Tuple, Type, Union, NewType, Any, Callable
 
 from pytest import mark, raises
 
@@ -22,8 +22,9 @@ def test_str():
         A(12)
 
 
-def test_int():
-    A = ACls(int)
+@mark.parametrize('t', [int, NewType('T', int)])
+def test_int(t):
+    A = ACls(t)
 
     a = A(12)
     assert a.x == 12
@@ -63,6 +64,22 @@ def test_list_strict():
         A(range(12))
 
 
+@mark.parametrize('T', [list, List])
+def test_list(T):
+    A = ACls(T)
+
+    a = A(['1', '2'])
+    assert a.x == ['1', '2']
+    a = A(['a', 'b', 'c'])
+    assert a.x == ['a', 'b', 'c']
+    a = A([str(i) for i in range(4)])
+    assert a.x == ['0', '1', '2', '3']
+    with raises(TypeError):
+        A(123)
+    with raises(TypeError):
+        A(range(12))
+
+
 def test_literal():
     A = ACls(Literal['a', 'b', 2, 0])
     a = A('b')
@@ -88,6 +105,19 @@ def test_none(T):
         A('None')
     with raises(TypeError):
         A(False)
+
+
+@mark.parametrize('T', [type, Type])
+def test_type_gen(T):
+    A = ACls(T)
+    a = A(int)
+    assert a.x is int
+    a = A(object)
+    assert a.x is object
+    a = A(list)
+    assert a.x is list
+    with raises(TypeError):
+        ACls(15)
 
 
 def test_union():
@@ -195,3 +225,56 @@ def test_invalid_gen1():
     with raises(TypeError):
         class A(RecordBase):
             x: Iterable[Annotated[str, TypeCheckStyle.check]]
+
+
+@mark.parametrize('T',[callable, Callable])
+def test_callable(T):
+    A = ACls(T)
+    a = A(int)
+    assert a.x == int
+    a = A(eval)
+    assert a.x == eval
+    a = A(Iterable)
+    assert a.x == Iterable
+    with raises(TypeError):
+        A(12)
+
+
+def test_complex_union():
+    A = ACls(Union[List[Annotated[int, TypeCheckStyle.check]], int])
+    a = A([12, 36, 12])
+    assert a.x == [12, 36, 12]
+    a = A(6)
+    assert a.x == 6
+    with raises(ValueError):
+        A(['str'])
+
+
+def test_double_union():
+    A = ACls(Union[bool, int])
+    a = A(1)
+    assert a.x == 1
+    a = A(True)
+    assert a.x is True
+
+
+@mark.parametrize('T', [object, Any])
+def test_any(T):
+    A = ACls(T)
+
+    a = A(12)
+    assert a.x == 12
+    a = A(False)
+    assert a.x is False
+    a = A(2.0)
+    assert a.x == 2.0
+
+    class C:
+        pass
+
+    c = C()
+    a = A(c)
+    assert a.x == c
+    c = object()
+    a = A(c)
+    assert a.x == c

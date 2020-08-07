@@ -1,5 +1,5 @@
 from math import isclose
-from typing import Dict, Hashable, List, Set
+from typing import Dict, Hashable, List, Set, Final
 
 from pytest import fixture, mark, raises, skip
 
@@ -178,3 +178,27 @@ def test_autofactory_underride(frozen):
         addends: Dict[str, int] = DefaultValue(n)
 
     assert Aggregator(3).addends is Aggregator(3).addends is n
+
+
+@mark.parametrize('frozen', [True, False])
+def test_bad_record(frozen):
+    with raises(TypeError):
+        class _(RecordBase, frozen=frozen):
+            # noinspection PyFinal
+            x: Final
+
+
+def test_bad_record_frozen_spec():
+    with raises(TypeError):
+        class _(RecordBase):
+            # noinspection PyFinal
+            x: Final[int]
+
+
+def test_record_frozen_spec():
+    class A(RecordBase, frozen=True):
+        # noinspection PyFinal
+        x: Final[int]
+
+    a = A(3)
+    assert a.x == 3

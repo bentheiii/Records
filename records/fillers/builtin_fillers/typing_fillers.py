@@ -1,11 +1,12 @@
 import collections.abc as abstract_collections
 import contextlib
 from collections import defaultdict, deque
-from itertools import chain
-from typing import Any, Generator, Sequence, Union
+from collections.abc import Callable as CallableBase
+from itertools import chain, islice
+from typing import Any, Generator, Sequence, Union, TypeVar
 
 from records.fillers.builtin_fillers.recurse import GetFiller
-from records.fillers.filler import AnnotatedFiller, Filler, FillingIntent, TypeCheckStyle
+from records.fillers.filler import AnnotatedFiller, Filler, FillingIntent, TypeCheckStyle, TypeMatch
 from records.fillers.get_filler import get_annotated_filler, get_filler
 from records.utils.typing_compatible import get_args, get_origin
 
@@ -56,7 +57,7 @@ class UnionFiller(AnnotatedFiller):
                 elif sg.latest > current_score:
                     rest.append(sg)
                 else:
-                    rest.append(sg)
+                    current.append(sg)
 
             pending = rest
             good_typechecks = []
@@ -84,7 +85,7 @@ class UnionFiller(AnnotatedFiller):
                 good_validations.append((c.origin, e.value))
             except Exception:
                 pass
-            else:
+            else:  # pragma: no cover
                 raise BaseException(f'filler of origin {c.origin} did not return or raise after validation')
 
         if not good_validations:
@@ -117,11 +118,10 @@ class LiteralFiller(AnnotatedFiller):
         for pv in get_args(origin):
             self.possible_values[type(pv)].add(pv)
 
-    def type_check(self, v) -> bool:
-        return isinstance(v, tuple(self.possible_values))
-
-    def type_check_strict(self, v) -> bool:
-        return type(v) in self.possible_values
+    def type_check(self, v):
+        if type(v) in self.possible_values:
+            return TypeMatch.exact
+        return isinstance(v, tuple(self.possible_values)) and TypeMatch.inexact
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
@@ -147,6 +147,9 @@ class WrapperFiller(Filler):
 
     def is_hollow(self) -> bool:
         return self.inner_filler.is_hollow()
+
+    def apply(self, token):
+        self.inner_filler.apply(token)
 
 
 class TypeFiller(WrapperFiller):
@@ -214,18 +217,26 @@ class TupleFiller(WrapperFiller):
                 def _(v):
                     hollow_passes = 0  # the number of elements that filled identically
                     for element, filler in zip(v, inner_fillers):
-                        filled = filler.__call__(element)
+                        filled = filler(element)
                         if filled is element:
                             hollow_passes += 1
                         else:
                             all_elements = chain(
                                 v[:hollow_passes],
                                 [filled],
-                                (filler.__call__(a) for a in zip(v[hollow_passes + 1:],
-                                                                 inner_fillers[hollow_passes + 1:]))
+                                (if_(a) for (a, if_) in zip(v[hollow_passes + 1:],
+                                                            inner_fillers[hollow_passes + 1:]))
                             )
                             return type(v)(all_elements)
                     return v
+
+
+def _split_at(seq, ignore_ind):
+    try:
+        return seq[:ignore_ind], seq[ignore_ind + 1:]
+    except TypeError:
+        i = iter(seq)
+        return islice(i, ignore_ind), islice(i, 1, None)
 
 
 class GenericIterableFiller1(WrapperFiller):
@@ -249,20 +260,21 @@ class GenericIterableFiller1(WrapperFiller):
             def inner_validator(v):
                 hollow_passes = 0  # the number of elements that filled identically
                 for element in v:
-                    filled = inner_filler.__call__(element)
+                    filled = inner_filler(element)
                     if filled is element:
                         hollow_passes += 1
                     else:
+                        pre, post = _split_at(v, hollow_passes)
                         all_elements = chain(
-                            v[:hollow_passes],
+                            pre,
                             [filled],
-                            (inner_filler.__call__(a) for a in v[hollow_passes + 1:])
+                            (inner_filler(a) for a in post)
                         )
                         return self.reconstruct(all_elements, v)
                 return v
 
 
-class GenericDeque(GenericIterableFiller1):
+class GenericDequeFiller(GenericIterableFiller1):
     def reconstruct(self, elements, initial: deque):
         return type(initial)(elements, initial.maxlen)
 
@@ -328,22 +340,28 @@ genric_origin_map = {
     tuple: TupleFiller,
     type: TypeFiller,
 
+    deque: GenericDequeFiller, defaultdict: DefaultDictFiller,
+
     abstract_collections.Sequence: GenericIterableFiller1, abstract_collections.MutableSequence: GenericIterableFiller1,
     abstract_collections.Set: GenericIterableFiller1, abstract_collections.MutableSet: GenericIterableFiller1,
     list: GenericIterableFiller1, set: GenericIterableFiller1, frozenset: GenericIterableFiller1,
-    deque: GenericIterableFiller1,
 
     abstract_collections.Iterable: GenericFillerN, abstract_collections.Iterator: GenericFillerN,
     abstract_collections.Reversible: GenericFillerN, abstract_collections.Collection: GenericFillerN,
     abstract_collections.Container: GenericFillerN, abstract_collections.AsyncIterator: GenericFillerN,
-    abstract_collections.AsyncIterable: GenericFillerN,
-    contextlib.AbstractContextManager: GenericFillerN, contextlib.AbstractAsyncContextManager: GenericFillerN,
+    abstract_collections.AsyncIterable: GenericFillerN, contextlib.AbstractContextManager: GenericFillerN,
+    contextlib.AbstractAsyncContextManager: GenericFillerN,
 
     abstract_collections.Mapping: GenericMappingFiller, abstract_collections.MutableMapping: GenericMappingFiller,
     dict: GenericMappingFiller,
 
     abstract_collections.AsyncGenerator: GenericFillerN, abstract_collections.Generator: GenericFillerN
 }
+
+
+def has_args(v):
+    args = get_args(v)
+    return args and any(not isinstance(a, TypeVar) for a in args)
 
 
 @typing_checkers.append
@@ -361,15 +379,16 @@ def _typing(stored_type):
     if origin_cls == Literal:
         return LiteralFiller
     if origin_cls == type:
-        if get_args(stored_type):
+        if has_args(stored_type):
             return TypeFiller
         raise GetFiller(type)
-
-    if get_args(stored_type):
+    if origin_cls == CallableBase:
+        if get_args(stored_type):  # pragma: no cover
+            raise NotImplementedError
+        raise GetFiller(callable)
+    if has_args(stored_type):
         t = genric_origin_map.get(origin_cls)
         if t:
             return t
-        try:
-            return next(v for (k, v) in genric_origin_map.items() if issubclass(origin_cls, k))
-        except StopIteration:
-            pass
+    elif origin_cls:
+        raise GetFiller(origin_cls)

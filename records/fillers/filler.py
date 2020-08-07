@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from enum import Enum, IntEnum, auto
-from typing import Any, Callable, Generator, Generic, List, Protocol, TypeVar, Iterable
+from typing import Any, Callable, Generator, Generic, List, Protocol, TypeVar, Iterable, Union, Type, Optional
 
 from records.fillers.coercers import CoercionToken
 from records.fillers.validators import ValidationToken
@@ -46,11 +46,17 @@ class TypeCheckStyle(Enum):
 
 
 class FillingIntent(IntEnum):
-    attempt_no_coerce = 0
-    attempt_coerce = 1
-    attempt_hollow = 2
+    attempt_no_coerce_strict = 0
+    attempt_no_coerce = 1
+    attempt_coerce = 2
+    attempt_hollow = 3
 
     attempt_validation = -1
+
+
+class TypeMatch(Enum):
+    exact = TypeCheckStyle.check_strict.value
+    inexact = TypeCheckStyle.check.value
 
 
 T = TypeVar('T')
@@ -68,6 +74,12 @@ class Filler(Protocol[T]):
     @abstractmethod
     def is_hollow(self) -> bool:
         pass
+
+    @abstractmethod
+    def apply(self, token):
+        if isinstance(token, Iterable):
+            for t in token:
+                self.apply(t)
 
     def __call__(self, arg):
         try:
@@ -87,20 +99,18 @@ class AnnotatedFiller(Filler, Generic[T]):
         self.validators: List[Callable[[T], T]] = []
 
     def fill(self, arg) -> Generator[FillingIntent, None, T]:
-        if self.type_checking_style == TypeCheckStyle.default:
+        if self.type_checking_style == TypeCheckStyle.default:  # pragma: no cover
             raise Exception
 
         if self.type_checking_style == TypeCheckStyle.hollow:
             yield FillingIntent.attempt_hollow
         else:
-            yield FillingIntent.attempt_no_coerce
-            if self.type_checking_style == TypeCheckStyle.check_strict:
-                tc_method = self.type_check_strict
+            tp = self.type_check(arg)
+            if tp == TypeMatch.exact:
+                yield FillingIntent.attempt_no_coerce_strict
+            elif tp == TypeMatch.inexact and self.type_checking_style == TypeCheckStyle.check:
+                yield FillingIntent.attempt_no_coerce
             else:
-                tc_method = self.type_check
-            is_type = tc_method(arg)
-
-            if not is_type:
                 # perform coercion
                 yield FillingIntent.attempt_coerce
                 if not self.coercers:
@@ -108,7 +118,9 @@ class AnnotatedFiller(Filler, Generic[T]):
                 for i, coercer in enumerate(self.coercers):
                     try:
                         arg = coercer(arg)
-                        if not tc_method(arg):
+                        tc = self.type_check(arg)
+                        if tc is None \
+                                or (tc == TypeMatch.inexact and self.type_checking_style != TypeCheckStyle.check):
                             raise TypeError(f'coercer returned value of wrong type: {type(arg)}')
                     except (TypeError, ValueError):
                         if i == len(self.coercers) - 1:
@@ -136,28 +148,23 @@ class AnnotatedFiller(Filler, Generic[T]):
             self.type_checking_style = token
         elif isinstance(token, CoercionToken) or (isinstance(token, type) and issubclass(token, CoercionToken)):
             self.coercers.append(self.get_coercer(token))
-        elif isinstance(token, ValidationToken) or isinstance(token, type) and issubclass(token, (CoercionToken, ValidationToken)):
+        elif isinstance(token, ValidationToken) or isinstance(token, type) and issubclass(token, ValidationToken):
             self.validators.append(self.get_validator(token))
-        elif isinstance(token, Iterable):
-            for t in token:
-                self.apply(t)
+        else:
+            super().apply(token)
 
     @abstractmethod
-    def type_check_strict(self, v) -> bool:
+    def type_check(self, v) -> Optional[TypeMatch]:
         pass
 
-    @abstractmethod
-    def type_check(self, v) -> bool:
-        pass
-
-    def get_coercer(self, token: CoercionToken) -> Callable[[Any], T]:
+    def get_coercer(self, token: Union[CoercionToken, Type[CoercionToken]]) -> Callable[[Any], T]:
         if isinstance(token, type):
             return self.get_coercer(token())
         if callable(token):
             return token(self.origin, self)
-        raise TypeError(token)
+        raise TypeError(token)  # pragma: no cover
 
-    def get_validator(self, token: ValidationToken) -> Callable[[T], T]:
+    def get_validator(self, token: Union[ValidationToken, Type[ValidationToken]]) -> Callable[[T], T]:
         if isinstance(token, type):
             return self.get_coercer(token())
         if callable(token):

@@ -2,12 +2,13 @@ from abc import abstractmethod, ABC
 from functools import partial
 from inspect import isabstract
 from math import isclose
-from numbers import Rational, Real
+from numbers import Rational, Real, Number, Complex
 from operator import index
 from typing import Any, Callable, Dict, Generic, Tuple, Type, TypeVar
 
+from records.fillers.builtin_fillers.recurse import GetFiller
 from records.fillers.coercers import CoercionToken, GlobalCoercionToken
-from records.fillers.filler import AnnotatedFiller, TypeCheckStyle
+from records.fillers.filler import AnnotatedFiller, TypeCheckStyle, TypeMatch
 
 T = TypeVar('T')
 
@@ -56,37 +57,36 @@ class ArgsOriginDependant(OriginDependant, ABC):
         return self.func_args(origin, v, self.args, self.kwargs)
 
 
-class LooseMixin(Callable):
-    def __call__(self, origin):
-        if isabstract(origin):
-            raise TypeError('cannot use loose coercer with abstract type')
-        return super().__call__(origin)
+class LooseMixin(ArgsOriginDependant, ABC):
+    def __call__(self, origin, filler):
+        if (not isinstance(origin, type)) or isabstract(origin):
+            raise TypeError(f'cannot use loose coercer with non-concrete type {origin}')
+        return super().__call__(origin, filler)
 
 
-class Loose(ArgsOriginDependant, LooseMixin):
+class Loose(LooseMixin):
     @staticmethod
     def func_args(origin, v, args, kwargs):
         return origin(v, *args, **kwargs)
 
 
-class LooseUnpack(ArgsOriginDependant, LooseMixin):
+class LooseUnpack(LooseMixin):
     @staticmethod
     def func_args(origin, v, args, kwargs):
         return origin(*v, *args, **kwargs)
 
 
-class LooseUnpackMap(ArgsOriginDependant, LooseMixin):
+class LooseUnpackMap(LooseMixin):
     @staticmethod
     def func_args(origin, v, args, kwargs):
         return origin(*args, **v, **kwargs)
 
 
 class SimpleFiller(AnnotatedFiller[T], Generic[T]):
-    def type_check_strict(self, v) -> bool:
-        return type(v) == self.origin
-
-    def type_check(self, v) -> bool:
-        return isinstance(v, self.origin)
+    def type_check(self, v):
+        if type(v) == self.origin:
+            return TypeMatch.exact
+        return TypeMatch.inexact if isinstance(v, self.origin) else None
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
@@ -96,8 +96,8 @@ class SimpleFiller(AnnotatedFiller[T], Generic[T]):
 
 
 class Whole(ArgsOriginDependant):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
+    @classmethod
+    def func_args(cls, origin, v, args, kwargs):
         if isinstance(v, Rational):
             if v.denominator == 1:
                 return origin(v.numerator, *args, **kwargs)
@@ -105,6 +105,9 @@ class Whole(ArgsOriginDependant):
             mod = v % 1
             if isclose(mod, 0) or isclose(mod, 1):
                 return origin(v, *args, **kwargs)
+        elif isinstance(v, Complex):
+            if v.imag == 0:
+                return cls.func_args(origin, v.real, args, kwargs)
         raise TypeError
 
 
@@ -117,6 +120,11 @@ class FromBytes(ArgsOriginDependant):
 class ToBytes(ArgsOriginDependant):
     @staticmethod
     def func_args(origin, v, args, kwargs):
+        if not isinstance(v, int):
+            raise type
+        if not args:
+            signed = kwargs.get('signed', False)
+            args = ((v.bit_length() + 7 + signed) // 8,)
         return origin(v.to_bytes(*args, **kwargs))
 
 
@@ -149,14 +157,12 @@ class SingletonFromFalsish(ArgsOriginDependant):
 
 class NoneFiller(SimpleFiller[None]):
     def type_check(self, v) -> bool:
-        return v is None
-
-    type_check_strict = type_check
+        return (v is None) and TypeMatch.exact
 
 
 class EllipsisFiller(SimpleFiller[type(...)]):
     def type_check(self, v) -> bool:
-        return v is ...
+        return (v is ...) and TypeMatch.exact
 
     type_check_strict = type_check
 
@@ -167,7 +173,8 @@ class Encoding(Loose):
 
 
 class CallableFiller(AnnotatedFiller[Callable]):
-    type_check = type_check_strict = staticmethod(callable)
+    def type_check(self, v):
+        return callable(v) and TypeMatch.exact
 
 
 std_filler_map: Dict[Any, Type[AnnotatedFiller]] = {
@@ -189,4 +196,4 @@ def callable_checker(stored_type):
 @std_filler_checkers.append
 def none_checker(stored_type):
     if stored_type is None:
-        return NoneFiller
+        raise GetFiller(type(None))
