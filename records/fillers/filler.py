@@ -168,8 +168,8 @@ class AnnotatedFiller(Filler, Generic[T]):
         if isinstance(token, type):
             return self.get_coercer(token())
         if callable(token):
-            return token
-        raise TypeError(token)
+            return token(self.origin, self)
+        raise TypeError(token)  # pragma: no cover
 
     def is_hollow(self) -> bool:
         return self.type_checking_style == TypeCheckStyle.hollow

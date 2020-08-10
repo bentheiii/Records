@@ -1,9 +1,11 @@
 from math import isclose
+from types import SimpleNamespace
 from typing import Dict, Hashable, List, Set, Final
 
 from pytest import fixture, mark, raises, skip
 
 from records import DefaultValue, Factory, RecordBase
+from records.select import Select
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])
@@ -51,7 +53,8 @@ def test_eq(Point):
 
 def test_dict_eq(Point):
     p = Point(x=3.0, y=2)
-    assert p.as_dict() == {'x': 3.0, 'y': 2, 'z': 0}
+    assert p.as_dict() == {'x': 3.0, 'y': 2}
+    assert p.as_dict(include_defaults=True) == {'x': 3.0, 'y': 2, 'z': 0}
 
 
 def test_repr(Point):
@@ -99,7 +102,7 @@ def test_slotted(Point):
     assert p.t == 't'
 
 
-def test_ignored_attr():
+def test_removed_attr():
     class IPoint(RecordBase):
         a = 1
 
@@ -202,3 +205,80 @@ def test_record_frozen_spec():
 
     a = A(3)
     assert a.x == 3
+
+
+def test_from_mapping(Point):
+    d = {'x': 3, 'y': 2.0}
+    assert Point.from_mapping(d) == Point(x=3, y=2.0)
+    d = {'x_': 3, 'y': 2.0, 'g': 'howdy'}
+    assert Point.from_mapping.select(keys_to_remove='g', keys_to_rename=[('x_', 'x')])(d) \
+           == Point(x=3, y=2.0)
+    assert Point.from_mapping.select(
+        keys_to_remove='g',
+        keys_to_rename=[('x_', 'x')],
+        keys_to_maybe_rename=[('Y', 'y')]
+    )(d) == Point(x=3, y=2.0)
+    assert Point.from_mapping.select(
+        keys_to_remove='g',
+        keys_to_rename={'x_': 'x'},
+        keys_to_maybe_rename={'Y': 'y'}
+    )(d) == Point(x=3, y=2.0)
+    assert Point.from_mapping.select(
+        keys_to_remove='g',
+        keys_to_rename={'x_': 'x'},
+        keys_to_maybe_rename={'Y': 'y'},
+        keys_to_add={'z': 3}
+    )(d) == Point(x=3, y=2.0, z=3)
+    assert Point.from_mapping.select(
+        keys_to_remove='g',
+        keys_to_maybe_rename={'Y': 'y', 'x_': 'x'},
+        keys_to_add={'z': 3}
+    )(d) == Point(x=3, y=2.0, z=3)
+    assert Point.from_mapping.select(
+        keys_to_remove='g',
+        keys_to_maybe_rename={'Y': 'y', 'x_': 'x'},
+        keys_to_maybe_add={'z': 3}
+    )(d) == Point(x=3, y=2.0, z=3)
+    with raises(TypeError):
+        Point.from_mapping(d)
+    d = {'x': 3, 'y': 2.0, 'g': 'howdy', 'z': 2}
+    assert Point.from_mapping.select(
+        Select(keys_to_remove='g', keys_to_maybe_remove='j'),
+        Select.empty,  # cover merging with empty
+        keys_to_maybe_add={'z': 3}
+    )(d) == Point(x=3, y=2.0, z=2)
+    with raises(ValueError):
+        assert Point.from_mapping.select(
+            keys_to_remove='g',
+            keys_to_add={'z': 3}
+        )(d)
+    with raises(ValueError):
+        assert Point.from_mapping.select(
+            keys_to_rename={'x': 'z'}
+        )(d)
+    with raises(ValueError):
+        assert Point.from_mapping.select(
+            keys_to_maybe_rename={'x': 'z'}
+        )(d)
+
+
+def test_from_instance(Point):
+    p = Point(x=1, y=2, z=3)
+    assert Point.from_instance(p) == p
+    if Point.is_frozen():
+        assert Point.from_instance(p) is p
+        assert Point.from_instance(p, z=4) is not p
+        assert Point.from_instance(p, {}) is not p
+    else:
+        assert Point.from_instance(p) is not p
+    assert Point.from_instance(p, z=4) == Point(x=1, y=2, z=4)
+    assert Point.from_instance.select(keys_to_remove='z')(p) == Point(x=1, y=2)
+    mp = SimpleNamespace(x=1, y=2, z=3)
+    assert Point.from_instance(mp) == p
+
+
+def test_from_json(Point):
+    p = Point(x=1, y=2, z=3)
+    s = '{"x":1,"y":2,"z":3}'
+    assert Point.from_json(s) == p
+    assert Point.from_json.select(keys_to_remove='z')(s) == Point(x=1, y=2)

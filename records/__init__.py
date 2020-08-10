@@ -4,6 +4,8 @@ from records.fillers.filler import TypeCheckStyle
 from records.record import DefaultValue, Factory, RecordBase
 from records.utils.typing_compatible import Annotated
 from records.fillers.coercers import CallCoercion, MapCoercion, ComposeCoercer
+from records.fillers.builtin_validators import Clamp, Within, FullMatch, Truth, Cyclic
+from records.fillers.validators import ValidationToken, AssertValidation, CallValidation, AssertCallValidation
 
 check = TypeCheckStyle.check
 check_strict = TypeCheckStyle.check_strict
@@ -15,7 +17,17 @@ __all__ = [
     'TypeCheckStyle', 'check', 'check_strict', 'hollow',
 
     'CallCoercion', 'MapCoercion', 'ComposeCoercer',
+    'ValidationToken', 'AssertValidation', 'CallValidation', 'AssertCallValidation',
+    'Clamp', 'Within', 'FullMatch', 'Truth', 'Cyclic',
 
     'Eval', 'Loose', 'LooseUnpack', 'LooseUnpackMap', 'Whole', 'FromBytes', 'FromInteger',
     'SingletonFromFalsish', 'Encoding'
 ]
+
+# TODO:
+#  * idiomatic new
+#  * json coercion
+#  * exporting records
+#  * field tags (for exporting)
+#  * __copy__
+#  * handle
