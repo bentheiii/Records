@@ -5,8 +5,8 @@ from typing import Iterable, Union, Sequence, Tuple, Deque, Mapping, DefaultDict
 
 from pytest import raises, mark
 
-from records import Annotated, Eval, Loose, RecordBase, TypeCheckStyle, LooseUnpack, LooseUnpackMap, Whole, FromBytes, \
-    FromInteger, SingletonFromFalsish, Encoding, ComposeCoercer, CallCoercion, MapCoercion
+from records import Annotated, Eval, Loose, RecordBase, TypeCheckStyle, LooseUnpack, LooseUnpackMap, Whole, FromInteger, \
+    SingletonFromFalsish, Encoding, ComposeCoercer, CallCoercion, MapCoercion, ClassMethodCoercion
 from records.fillers.builtin_fillers.std_fillers import ToBytes
 
 
@@ -89,7 +89,7 @@ def test_whole():
 
 
 def test_from_bytes():
-    a = ACls(int, FromBytes(byteorder='big'))
+    a = ACls(int, ClassMethodCoercion('from_bytes', byteorder='big'))
     a(6, 6)
     a(True, True)
     a(b'', 0)

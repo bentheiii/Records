@@ -2,9 +2,8 @@ from abc import abstractmethod, ABC
 from functools import partial
 from inspect import isabstract
 from math import isclose
-from numbers import Rational, Real, Number, Complex
-from operator import index
-from typing import Any, Callable, Dict, Generic, Tuple, Type, TypeVar
+from numbers import Rational, Real, Complex
+from typing import Any, Callable, Dict, Generic, Type, TypeVar
 
 from records.fillers.builtin_fillers.recurse import GetFiller
 from records.fillers.coercers import CoercionToken, GlobalCoercionToken
@@ -109,12 +108,6 @@ class Whole(ArgsOriginDependant):
             if v.imag == 0:
                 return cls.func_args(origin, v.real, args, kwargs)
         raise TypeError
-
-
-class FromBytes(ArgsOriginDependant):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
-        return origin.from_bytes(v, *args, **kwargs)
 
 
 class ToBytes(ArgsOriginDependant):

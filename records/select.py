@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from itertools import chain
-from typing import Iterable, Union, Tuple, Mapping, Any, Generic, TypeVar, Type, Optional, Callable
+from typing import Iterable, Union, Tuple, Mapping, Any, Generic, TypeVar, Type, Optional, Callable, NamedTuple, \
+    Generator
 
 
 class Select:
@@ -126,7 +127,7 @@ class SelectableClassDescriptor(Generic[T]):
         return self.from_map(cls, mapping)
 
     def __get__(self, instance, owner):
-        return SelectableClassDescriptor.Bound(self, owner, Select.empty)
+        return self.Bound(self, owner, Select.empty)
 
     class Bound:
         def __init__(self, descriptor: SelectableClassDescriptor, owner_cls: Type, select: Select):
@@ -142,19 +143,24 @@ class SelectableClassDescriptor(Generic[T]):
 
 
 class SelectableConstructor(SelectableClassDescriptor):
-    def __init__(self, func, shortcut: Optional[Callable] = None):
+    def __init__(self, func):
         if isinstance(func, classmethod):
             func = func.__func__
-        if isinstance(shortcut, classmethod):
-            shortcut = shortcut.__func__
         self.func = func
-        self._shortcut = shortcut
 
     def from_map(self, cls, map: Mapping[str, Any]):
         return cls(**map)
 
     def make_map(self, cls, *args, **kwargs) -> Mapping[str, Any]:
         return self.func(cls, *args, **kwargs)
+
+
+class SelectableShortcutConstructor(SelectableConstructor):
+    def __init__(self, func, shortcut: Optional[Callable] = None):
+        super().__init__(func)
+        if isinstance(shortcut, classmethod):
+            shortcut = shortcut.__func__
+        self._shortcut = shortcut
 
     def shortcut(self, sc):
         if self._shortcut:  # pragma: no cover
@@ -167,3 +173,55 @@ class SelectableConstructor(SelectableClassDescriptor):
             if ret is not NotImplemented:
                 return ret
         return super().run(cls, args, kwargs, select)
+
+
+class SelectableExporter(Generic[T]):
+    @abstractmethod
+    def from_mapping(self, m: Mapping[str, Any], *args, **kwargs) -> T:
+        pass
+
+    def run(self, instance, args, kwargs, export_args, export_kwargs, select):
+        mapping = instance._to_dict(instance, *export_args, **export_kwargs)
+        mapping = select(mapping)
+        return self.from_mapping(mapping, *args, **kwargs)
+
+    def __get__(self, instance, owner):
+        if instance is None:  # pragma: no cover
+            return self
+        return self.Bound(self, instance, (), {}, Select.empty)
+
+    class Bound:
+        def __init__(self, descriptor: SelectableExporter, owner, export_args, export_kwargs, select):
+            self.descriptor = descriptor
+            self.owner = owner
+            self.export_args = export_args
+            self.export_kwargs = export_kwargs
+            self.select_ = select
+
+        def __call__(self, *args, **kwargs):
+            return self.descriptor.run(self.owner, args, kwargs, self.export_args, self.export_kwargs, self.select_)
+
+        def select(self, *selects: Select, **kwargs):
+            return type(self)(self.descriptor, self.owner, self.export_args, self.export_kwargs,
+                              self.select_.merge(*selects, **kwargs))
+
+        def export_with(self, *args, **kwargs):
+            return type(self)(self.descriptor, self.owner, (*self.export_args, *args), {**self.export_kwargs, **kwargs},
+                              self.select_)
+
+
+class Exporter(SelectableExporter):
+    def __init__(self, func: Callable):
+        if isinstance(func, staticmethod):
+            func = func.__func__
+        self.func = func
+
+    def from_mapping(self, m: Mapping[str, Any], *args, **kwargs) -> T:
+        return self.func(m, *args, **kwargs)
+
+
+class NoArgExported(Exporter):
+    class Bound(Exporter.Bound):
+        def __call__(self, *args, **kwargs):
+            return self.descriptor.run(self.owner, (), {}, (*self.export_args, *args), {**self.export_kwargs, **kwargs},
+                                       self.select_)

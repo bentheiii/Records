@@ -53,8 +53,8 @@ def test_eq(Point):
 
 def test_dict_eq(Point):
     p = Point(x=3.0, y=2)
-    assert p.as_dict() == {'x': 3.0, 'y': 2}
-    assert p.as_dict(include_defaults=True) == {'x': 3.0, 'y': 2, 'z': 0}
+    assert p.to_dict() == {'x': 3.0, 'y': 2}
+    assert p.to_dict.export_with(include_defaults=True)() == {'x': 3.0, 'y': 2, 'z': 0}
 
 
 def test_repr(Point):
@@ -126,11 +126,10 @@ def test_removed_attr():
 
 
 def test_bad_hint():
-    with raises(TypeError):
-        class IPoint(RecordBase):
-            x: float
-            y: float
-            z: 2 = 0
+    class IPoint(RecordBase):
+        x: float
+        y: float
+        z: 2 = 0
 
 
 def test_bad_arg(Point):
@@ -282,3 +281,17 @@ def test_from_json(Point):
     s = '{"x":1,"y":2,"z":3}'
     assert Point.from_json(s) == p
     assert Point.from_json.select(keys_to_remove='z')(s) == Point(x=1, y=2)
+
+
+def test_dumb_hint():
+    class A(RecordBase):
+        x: 12
+
+    assert A(3).x == 3
+
+
+def test_circular():
+    class A(RecordBase):
+        x: 'A'
+
+    assert A(A(None)).x.x is None

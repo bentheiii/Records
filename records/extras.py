@@ -1,3 +1,4 @@
 import json
+import pickle
 
-__all__ = ['json']
+__all__ = ['json', 'pickle']

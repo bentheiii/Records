@@ -8,7 +8,7 @@ from warnings import warn
 import records.extras as extras
 from records.fillers.filler import TypeCheckStyle
 from records.fillers.get_filler import get_filler
-from records.select import SelectableConstructor
+from records.select import SelectableConstructor, Select, SelectableShortcutConstructor, Exporter, NoArgExported
 from records.utils.typing_compatible import get_args, get_origin, get_type_hints
 
 UNKNOWN_NAME = object()
@@ -26,6 +26,10 @@ class Pass:
 
 
 class SkipField(Exception):
+    pass
+
+
+class UnaryFailure(TypeError):
     pass
 
 
@@ -55,6 +59,10 @@ class RecordField:
         if self.default_is_factory:
             return self.default()
         return self.default
+
+    @property
+    def has_default(self):
+        return self.default is not NO_DEFAULT
 
     @classmethod
     def _apply_factory(cls, default):
@@ -93,8 +101,10 @@ class RecordBase:
     _optional_keys: ClassVar[AbstractSet[str]]
     _default_type_check_style: ClassVar[TypeCheckStyle]
     _frozen: ClassVar[bool]
+    _unary_parse: ClassVar[bool]
 
-    def __init_subclass__(cls, *, frozen: bool = False, default_type_check=TypeCheckStyle.hollow, **kwargs):
+    def __init_subclass__(cls, *, frozen: bool = False, unary_parse: Optional[bool] = None,
+                          default_type_check=TypeCheckStyle.hollow, **kwargs):
         super().__init_subclass__(**kwargs)
 
         if cls.__init__ is not RecordBase.__init__:  # pragma: no cover
@@ -103,7 +113,7 @@ class RecordBase:
         cls._frozen = frozen
         cls._default_type_check_style = default_type_check
         cls._fields = {}
-        for name, type_hint in get_type_hints(cls).items():
+        for name, type_hint in get_type_hints(cls, localns={cls.__name__: cls, cls.__qualname__: cls}).items():
             try:
                 field = RecordField.from_type_hint(type_hint,
                                                    owner=cls, name=name,
@@ -114,8 +124,11 @@ class RecordBase:
                 cls._fields[name] = field
                 setattr(cls, name, field)
 
-        cls._required_keys = {k for (k, f) in cls._fields.items() if f.default is NO_DEFAULT}
+        cls._required_keys = {k for (k, f) in cls._fields.items() if not f.has_default}
         cls._optional_keys = {k for k in cls._fields if k not in cls._required_keys}
+        if unary_parse is None:
+            unary_parse = len(cls._required_keys) != 1
+        cls._unary_parse = unary_parse
         if frozen:
             def __setattr__(s, a, value):
                 if a in RecordBase.__slots__:
@@ -136,9 +149,20 @@ class RecordBase:
         pass
 
     def __new__(cls, arg=NO_ARG, **kwargs):
+        parsing = None
         if arg is not NO_ARG:
+            if not kwargs and cls._unary_parse:
+                try:
+                    parsing = cls.parse(arg)
+                except UnaryFailure:
+                    if len(cls._required_keys) != 1:
+                        raise
+
             if len(cls._required_keys) != 1:
-                raise TypeError(f'non trivial class {cls.__qualname__} accepts no positional arguments')
+                if parsing is not None:
+                    return parsing
+                raise TypeError(f'class {cls.__qualname__} accepts no positional arguments')
+
             arg_key = next(iter(cls._required_keys))
             if arg_key in kwargs:
                 raise TypeError(f'duplicate {arg_key}')
@@ -147,18 +171,27 @@ class RecordBase:
         values = {}
         required = set(cls._required_keys)
         optional = set(cls._optional_keys)
-        for k, v in kwargs.items():
-            required.discard(k)
-            optional.discard(k)
-            field = cls._fields.get(k)
-            if not field:
-                raise TypeError(f'argument {k} invalid for type {cls.__qualname__}')
-            values[k] = field.filler(v)
+        try:
+            for k, v in kwargs.items():
+                required.discard(k)
+                optional.discard(k)
+                field = cls._fields.get(k)
+                if not field:
+                    raise TypeError(f'argument {k} invalid for type {cls.__qualname__}')
+                values[k] = field.filler(v)
+        except Exception:
+            if parsing is not None:
+                return parsing
+            raise
 
         if required:
             raise TypeError(f'missing required arguments: {tuple(required)}')
         for k in optional:
             values[k] = cls._fields[k].make_default()
+
+        if parsing is not None:
+            raise TypeError(f'positional argument of type {type(arg)} can be interpreted both as trivial argument '
+                            'and as unary argument')
 
         self = super().__new__(cls)
         d = self.__dict__
@@ -177,7 +210,7 @@ class RecordBase:
 
     def __repr__(self, **kwargs):
         params_parts = []
-        for name, value in self.as_dict(**kwargs).items():
+        for name, value in self.to_dict(**kwargs).items():
             params_parts.append(f'{name}={value!r}')
 
         return type(self).__qualname__ + "(" + ", ".join(params_parts) + ")"
@@ -191,20 +224,32 @@ class RecordBase:
         return True
 
     @classmethod
-    def _as_dict(cls, obj, include_defaults=False, sort_keys=False):
+    def _to_dict(cls, obj, include_defaults=False, sort=None):
         # class method to export attribute dict, even from objects that are not instances of the type
         def export(f: RecordField, v):
-            return include_defaults or (v != f.default)
+            return include_defaults or (v != f.make_default())
 
-        field_values = ((f, getattr(obj, f.name)) for f in cls._fields.values())
-        name_values = ((f.name, v) for (f, v) in field_values if export(f, v))
-        if sort_keys:
-            name_values = sorted(name_values)
+        def tuples():
+            for field in cls._fields.values():
+                try:
+                    v = getattr(obj, field.name)
+                except AttributeError:
+                    if not field.has_default:
+                        raise
+                else:
+                    if export(field, v):
+                        yield field.name, v
+
+        name_values = tuples()
+        if sort:
+            if sort is True:
+                name_values = sorted(name_values)
+            elif sort == -1:
+                name_values = sorted(name_values, reverse=True)
+            else:
+                name_values = sorted(name_values, key=lambda t: sort(t[0]))
 
         return dict(name_values)
-
-    def as_dict(self, **kwargs):
-        return self._as_dict(self, **kwargs)
 
     @classmethod
     def is_frozen(cls):
@@ -216,22 +261,28 @@ class RecordBase:
 
     def __hash__(self):
         if self._hash is None:
-            self._hash = hash(tuple(self.as_dict().values()))
+            self._hash = hash(tuple(self.to_dict().values()))
         return self._hash
+
+    def __getnewargs_ex__(self):
+        return (), self.to_dict()
 
     @SelectableConstructor
     @classmethod
     def from_mapping(cls, *maps: Mapping[str, Any], **kwargs: Any):
+        # we have to raise typerror if the argument is not a mapping because we want the constructor to fail early
+        if any(not isinstance(m, Mapping) for m in maps):
+            raise TypeError
         return ChainMap(*maps, dict(**kwargs))
 
-    @SelectableConstructor
+    @SelectableShortcutConstructor
     @classmethod
-    def from_identity(cls, v, *maps: Mapping[str, Any], **kwargs):
-        d = cls._as_dict(v)
+    def from_instance(cls, v, *maps: Mapping[str, Any], **kwargs):
+        d = cls._to_dict(v)
         d.update(*maps, **kwargs)
         return d
 
-    @from_identity.shortcut
+    @from_instance.shortcut
     @classmethod
     def from_instance(cls, v, *maps: Mapping[str, Any], **kwargs):
         if cls.is_frozen() and not maps and not kwargs and isinstance(v, cls):
@@ -241,7 +292,59 @@ class RecordBase:
     @SelectableConstructor
     @classmethod
     def from_json(cls, v, **kwargs):
-        if hasattr(v, 'read'):
-            return extras.json.load(v, **kwargs)
-        else:
-            return extras.json.loads(v, **kwargs)
+        return extras.json.loads(v, **kwargs)
+
+    @SelectableConstructor
+    @classmethod
+    def from_json_io(cls, v, **kwargs):
+        return extras.json.load(v, **kwargs)
+
+    @classmethod
+    def from_pickle(cls, v, *args, **kwargs):
+        ret = extras.pickle.loads(v, *args, **kwargs)
+        if not isinstance(ret, cls):
+            return cls.parse(ret)
+        return ret
+
+    @classmethod
+    def from_pickle_io(cls, v, *args, **kwargs):
+        ret = extras.pickle.load(v, *args, **kwargs)
+        if not isinstance(ret, cls):
+            return cls.parse(ret)
+        return ret
+
+    @classmethod
+    def parse(cls, v):
+        meths = (cls.from_json, cls.from_instance, cls.from_mapping, cls.from_pickle)
+        successes = []
+        for m in meths:
+            try:
+                r = m(v)
+            except Exception as e:
+                pass
+            else:
+                successes.append(r)
+        if len(successes) == 0:
+            raise UnaryFailure(f'cannot unarily construct {cls.__qualname__} from argument of type '
+                               f'{type(v).__qualname__}')
+        elif len(successes) > 1:
+            raise TypeError(f'multiple unary constructors succeeded with argument of type {type(v).__qualname__}')
+
+        return next(iter(successes))
+
+    @NoArgExported
+    @staticmethod
+    def to_dict(v) -> Mapping[str, Any]:
+        return v
+
+    @Exporter
+    @staticmethod
+    def to_json(v, *args, io=None, **kwargs) -> str:
+        if io is None:
+            return extras.json.dumps(v, *args, **kwargs)
+        extras.json.dump(v, io, *args, **kwargs)
+
+    def to_pickle(self, *args, io=None, **kwargs) -> bytes:
+        if io is None:
+            return extras.pickle.dumps(self, *args, **kwargs)
+        extras.pickle.dump(self, io, *args, **kwargs)

@@ -45,6 +45,21 @@ class MapCoercion(GlobalCoercionToken, Generic[T]):
         return self.inner
 
 
+class ClassMethodCoercion(GlobalCoercionToken, Generic[T]):
+    def __init__(self, method: str, *args, **kwargs):
+        self.method = method
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, cls, filler):
+        func = getattr(cls, self.method)
+
+        def ret(v):
+            return func(v, *self.args, **self.kwargs)
+
+        return ret
+
+
 class ComposeCoercer(GlobalCoercionToken):
     def __init__(self, *inner_coercers: Union[Type[CoercionToken], CoercionToken]):
         self.inner_coercers = inner_coercers
