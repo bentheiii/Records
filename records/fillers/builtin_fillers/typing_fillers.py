@@ -38,6 +38,11 @@ class UnionFiller(AnnotatedFiller):
         super().__init__(origin, args)
         self.sub_types = get_args(origin)
         self.sub_fillers: Sequence[Filler] = ()
+        self.applied = []
+
+    def apply(self, token):
+        super().apply(token)
+        self.applied.append(token)
 
     def fill(self, arg):
         if self.type_checking_style == TypeCheckStyle.hollow:
@@ -98,8 +103,9 @@ class UnionFiller(AnnotatedFiller):
         super().bind(owner_cls)
         self.sub_fillers = [get_filler(a) for a in self.sub_types]
         for sf in self.sub_fillers:
-            for t in self.args:
+            for t in chain(self.args, self.applied):
                 sf.apply(t)
+
             sf.bind(owner_cls)
         if self.type_checking_style == TypeCheckStyle.hollow:
             if not all(sf.is_hollow() for sf in self.sub_fillers):
@@ -383,8 +389,6 @@ def _typing(stored_type):
             return TypeFiller
         raise GetFiller(type)
     if origin_cls == CallableBase:
-        if get_args(stored_type):  # pragma: no cover
-            raise NotImplementedError
         raise GetFiller(callable)
     if has_args(stored_type):
         t = genric_origin_map.get(origin_cls)

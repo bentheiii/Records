@@ -15,6 +15,7 @@ if sys.version_info >= (3, 9, 0):  # pragma: no cover
 
     get_type_hints = partial(get_type_hints, include_extras=True)
 
+
     def is_annotation(t):
         return isinstance(t, _AnnotatedAlias)
 else:  # pragma: no cover
@@ -29,21 +30,33 @@ else:  # pragma: no cover
         def __call__(self, *args, **kwargs):
             raise TypeError
 
+
     Annotated.__origin__ = Annotated
+
 
     def is_annotation(t):
         return isinstance(t, Annotated)
+
 
     if sys.version_info >= (3, 8, 0):  # pragma: no cover
         _origins = get_origin
         _args = get_args
 
+
         def get_origin(v):
             return _origins(v) or getattr(v, '__origin__', None)
+
 
         def get_args(v):
             if v is Callable:
                 return ()
             return _args(v) or getattr(v, '__args__', None)
 
-__all__ = ['get_args', 'get_origin', 'Annotated', 'get_type_hints', 'is_annotation']
+
+def split_annotation(v):
+    if not is_annotation(v):
+        return v, ()
+    return get_origin(v), get_args(v)
+
+
+__all__ = ['get_args', 'get_origin', 'Annotated', 'get_type_hints', 'is_annotation', 'split_annotation']

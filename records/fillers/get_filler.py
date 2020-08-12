@@ -23,9 +23,6 @@ def get_filler(stored_type):
 
 
 def get_annotated_filler(origin, args):
-    by_type = getattr(origin, '__filler__', None)
-    if by_type:
-        return by_type(origin, args)
     for checker in builtin_filler_checkers:
         try:
             ret = checker(origin)

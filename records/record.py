@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 from collections import ChainMap
+from copy import deepcopy
 from inspect import getattr_static
-from typing import AbstractSet, ClassVar, Dict, Type, TypeVar, Optional, Mapping, Any
+from typing import AbstractSet, ClassVar, Dict, Type, TypeVar, Optional, Mapping, Any, Set, Union, Container, List, \
+    Callable
 from warnings import warn
 
 import records.extras as extras
+from records.fillers.validators import CallValidation, AssertCallValidation
+from records.fillers.coercers import CallCoercion
 from records.fillers.filler import TypeCheckStyle
 from records.fillers.get_filler import get_filler
-from records.select import SelectableConstructor, Select, SelectableShortcutConstructor, Exporter, NoArgExported
-from records.utils.typing_compatible import get_args, get_origin, get_type_hints
+from records.select import SelectableConstructor, SelectableShortcutConstructor, Exporter, NoArgExported
+from records.utils.decorators import decorator_kw_method
+from records.utils.typing_compatible import get_args, get_origin, get_type_hints, split_annotation
+from records.tags import Tag
 
 UNKNOWN_NAME = object()
 NO_DEFAULT = object()
@@ -19,6 +25,11 @@ try:
     from typing import Final
 except ImportError:  # pragma: no cover
     Final = object()
+
+
+def parser(func):
+    func.__parser__ = True
+    return func
 
 
 class Pass:
@@ -55,6 +66,8 @@ class RecordField:
         self.default_is_factory = is_factory
         self.owner: Type[RecordBase] = owner
 
+        self.tags: Set[Tag] = set()
+
     def make_default(self):
         if self.default_is_factory:
             return self.default()
@@ -78,15 +91,39 @@ class RecordField:
     def from_type_hint(cls, th, *, owner, **kwargs) -> RecordField:
         if th is Final:
             raise TypeError('raw Final cannot be use inside records')
-        origin = get_origin(th)
-        if origin == ClassVar:
+        origin, args = split_annotation(th)
+        meta_org = get_origin(origin)
+        if meta_org == ClassVar:
             raise SkipField
-        if origin == Final:
+        if meta_org == Final:
             if not owner.is_frozen():
                 raise TypeError('cannot declare Final field in non-frozen Record')
-            return cls.from_type_hint(get_args(th)[0], owner=owner, **kwargs)
-        filler = get_filler(th)
-        return cls(filler=filler, owner=owner, **kwargs)
+            ret = cls.from_type_hint(get_args(origin)[0], owner=owner, **kwargs)
+        else:
+            filler = get_filler(th)
+            ret = cls(filler=filler, owner=owner, **kwargs)
+        for arg in args:
+            ret._apply(arg)
+        return ret
+
+    @decorator_kw_method
+    def add_validator(self, func, **kwargs):
+        self.filler.apply(CallValidation(func, **kwargs))
+        return func
+
+    @decorator_kw_method
+    def add_assert_validator(self, func, **kwargs):
+        self.filler.apply(AssertCallValidation(func, **kwargs))
+        return func
+
+    @decorator_kw_method
+    def add_coercer(self, func, **kwargs):
+        self.filler.apply(CallCoercion(func, **kwargs))
+        return func
+
+    def _apply(self, token):
+        if isinstance(token, Tag):
+            self.tags.add(token)
 
 
 T = TypeVar('T')
@@ -102,6 +139,7 @@ class RecordBase:
     _default_type_check_style: ClassVar[TypeCheckStyle]
     _frozen: ClassVar[bool]
     _unary_parse: ClassVar[bool]
+    _parsers: ClassVar[List[Callable]]
 
     def __init_subclass__(cls, *, frozen: bool = False, unary_parse: Optional[bool] = None,
                           default_type_check=TypeCheckStyle.hollow, **kwargs):
@@ -139,13 +177,19 @@ class RecordBase:
         else:
             cls.__hash__ = None
 
-        cls.cls_post_init()
+        cls.pre_bind()
 
         for field in cls._fields.values():
             field.filler.bind(cls)
 
+        cls._parsers = []
+        for name in dir(cls):
+            v = getattr_static(cls, name)
+            if getattr(v, '__parser__', False):
+                cls._parsers.append(getattr(cls, name))
+
     @classmethod
-    def cls_post_init(cls):
+    def pre_bind(cls):
         pass
 
     def __new__(cls, arg=NO_ARG, **kwargs):
@@ -224,9 +268,20 @@ class RecordBase:
         return True
 
     @classmethod
-    def _to_dict(cls, obj, include_defaults=False, sort=None):
+    def _to_dict(cls, obj, include_defaults=False, sort=None,
+                 blacklist_tags: Union[Container[Tag], Tag] = frozenset(),
+                 whitelist_keys: Union[Container[str], str] = frozenset()):
         # class method to export attribute dict, even from objects that are not instances of the type
+        if isinstance(blacklist_tags, Tag):
+            blacklist_tags = frozenset([blacklist_tags])
+        if isinstance(whitelist_keys, str):
+            whitelist_keys = frozenset([whitelist_keys])
+
         def export(f: RecordField, v):
+            if f.name in whitelist_keys:
+                return True
+            if f.tags & blacklist_tags:
+                return False
             return include_defaults or (v != f.make_default())
 
         def tuples():
@@ -267,12 +322,10 @@ class RecordBase:
     def __getnewargs_ex__(self):
         return (), self.to_dict()
 
+    @parser
     @SelectableConstructor
     @classmethod
     def from_mapping(cls, *maps: Mapping[str, Any], **kwargs: Any):
-        # we have to raise typerror if the argument is not a mapping because we want the constructor to fail early
-        if any(not isinstance(m, Mapping) for m in maps):
-            raise TypeError
         return ChainMap(*maps, dict(**kwargs))
 
     @SelectableShortcutConstructor
@@ -282,6 +335,7 @@ class RecordBase:
         d.update(*maps, **kwargs)
         return d
 
+    @parser
     @from_instance.shortcut
     @classmethod
     def from_instance(cls, v, *maps: Mapping[str, Any], **kwargs):
@@ -289,6 +343,7 @@ class RecordBase:
             return v
         return NotImplemented
 
+    @parser
     @SelectableConstructor
     @classmethod
     def from_json(cls, v, **kwargs):
@@ -299,6 +354,7 @@ class RecordBase:
     def from_json_io(cls, v, **kwargs):
         return extras.json.load(v, **kwargs)
 
+    @parser
     @classmethod
     def from_pickle(cls, v, *args, **kwargs):
         ret = extras.pickle.loads(v, *args, **kwargs)
@@ -315,9 +371,8 @@ class RecordBase:
 
     @classmethod
     def parse(cls, v):
-        meths = (cls.from_json, cls.from_instance, cls.from_mapping, cls.from_pickle)
         successes = []
-        for m in meths:
+        for m in cls._parsers:
             try:
                 r = m(v)
             except Exception as e:
@@ -348,3 +403,14 @@ class RecordBase:
         if io is None:
             return extras.pickle.dumps(self, *args, **kwargs)
         extras.pickle.dump(self, io, *args, **kwargs)
+
+    def __copy__(self):
+        if self.is_frozen():
+            return self
+        return type(self).from_instance(self)
+
+    def __deepcopy__(self, memo=None):
+        memo = memo or {}
+        d = self.to_dict()
+        d = deepcopy(d, memo)
+        return self.from_mapping(d)

@@ -11,8 +11,10 @@ from records.fillers.builtin_fillers.std_fillers import ToBytes
 
 
 def ACls(T, *args):
+    annotated = Annotated.__class_getitem__((T, TypeCheckStyle.check, *args))
+
     class A(RecordBase):
-        x: Annotated[T, TypeCheckStyle.check, args]
+        x: annotated
 
     def ret(v, ex=None):
         a = A(v)
@@ -86,6 +88,10 @@ def test_whole():
         a(2.5)
     with raises(TypeError):
         a(Fraction(4, 3))
+    with raises(TypeError):
+        a("15")
+    with raises(TypeError):
+        a(1+1j)
 
 
 def test_from_bytes():
@@ -107,6 +113,15 @@ def test_to_bytes():
     a(300, bytearray([1, 300 - 256]))
     with raises(TypeError):
         a(25.6)
+
+def test_to_bytes_setlength():
+    a = ACls(bytearray, ToBytes(1, byteorder='big'))
+    a(bytearray(b'23'), bytearray(b'23'))
+    a(12, bytearray([12]))
+    with raises(TypeError):
+        a(25.6)
+    with raises(OverflowError):
+        a(300)
 
 
 def test_from_int():

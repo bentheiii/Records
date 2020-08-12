@@ -77,9 +77,8 @@ class Filler(Protocol[T]):
 
     @abstractmethod
     def apply(self, token):
-        if isinstance(token, Iterable):
-            for t in token:
-                self.apply(t)
+        # todo prevent applying if already binded
+        pass
 
     def __call__(self, arg):
         try:
@@ -122,7 +121,7 @@ class AnnotatedFiller(Filler, Generic[T]):
                         if tc is None \
                                 or (tc == TypeMatch.inexact and self.type_checking_style != TypeCheckStyle.check):
                             raise TypeError(f'coercer returned value of wrong type: {type(arg)}')
-                    except (TypeError, ValueError):
+                    except Exception:
                         if i == len(self.coercers) - 1:
                             raise
                     else:

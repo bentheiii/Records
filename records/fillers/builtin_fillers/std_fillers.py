@@ -115,7 +115,7 @@ class ToBytes(ArgsOriginDependant):
     def func_args(origin, v, args, kwargs):
         if not isinstance(v, int):
             raise type
-        if not args:
+        if not args and ('length' not in kwargs):
             signed = kwargs.get('signed', False)
             args = ((v.bit_length() + 7 + signed) // 8,)
         return origin(v.to_bytes(*args, **kwargs))

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from io import StringIO, BytesIO
 
-from pytest import fixture
+from pytest import fixture, mark
 
-from records import RecordBase
+from records import RecordBase, Annotated, check, Tag
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])
@@ -81,3 +81,30 @@ def test_unpickle_parse(Point):
     p0.to_pickle(io=io)
     io.seek(0)
     assert Point.from_pickle_io(io) == Point(x=3, y=1)
+
+
+@mark.parametrize('frozen', [True, False])
+def test_blacklist(frozen):
+    class User(RecordBase, frozen=frozen):
+        user_name: Annotated[str, check]
+        password: Annotated[str, check, Tag('secret')]
+
+    u = User(user_name="guest", password="swordfish")
+    assert u.to_dict() == {"user_name": "guest", "password": "swordfish"}
+    assert u.to_dict(blacklist_tags=Tag('secret')) == {"user_name": "guest"}
+
+
+@mark.parametrize('frozen', [True, False])
+def test_whitelist(frozen):
+    class Point(RecordBase, frozen=frozen):
+        x: Annotated[int, check, Tag('a')]
+        y: Annotated[int, check, Tag('b')]
+        z: Annotated[int, check, Tag('a')] = 0
+        w: Annotated[int, check, Tag('b')] = 0
+
+    u = Point(x=3, y=2)
+    assert u.to_dict() == {"x": 3, "y": 2}
+    assert u.to_dict(blacklist_tags=Tag('b')) == {"x": 3}
+    assert u.to_dict(whitelist_keys='w') == {"x": 3, "y": 2, "w": 0}
+    assert u.to_dict(whitelist_keys=('w', 'y')) == {"x": 3, "y": 2, "w": 0}
+    assert u.to_dict(blacklist_tags=Tag('b'), whitelist_keys='w') == {"x": 3, "w": 0}

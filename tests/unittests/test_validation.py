@@ -1,15 +1,15 @@
-from typing import Iterable, Any
+from typing import Iterable, Any, Union
 from unittest.mock import Mock
 
 from pytest import raises, mark, warns
 
 from records import Annotated, Loose, RecordBase, TypeCheckStyle, Within, Clamp, Cyclic, \
-    FullMatch, Truth, AssertCallValidation, CallValidation
+    FullMatch, Truth, AssertCallValidation, CallValidation, check
 
 
 def ACls(T, *args):
     class A(RecordBase):
-        x: Annotated[T, TypeCheckStyle.check, args]
+        x: Annotated.__class_getitem__((T, TypeCheckStyle.check, *args))
 
     def ret(v, ex=None):
         a = A(v)
@@ -111,3 +111,105 @@ def test_v_call():
     a('  a  ', 'a')
     a('   ', '')
     a('hi', 'hi')
+
+
+def test_char():
+    class A(RecordBase):
+        c: Annotated[Union[str, bytes], check]
+
+        @classmethod
+        def pre_bind(cls):
+            super().pre_bind()
+
+            @cls.c.add_assert_validator
+            def is_char(v):
+                return len(v) == 1
+
+    assert A('1').c == '1'
+    assert A(b'x').c == b'x'
+    with raises(ValueError):
+        A('12')
+
+def test_char_var():
+    class A(RecordBase):
+        c: Annotated[str, check]
+
+        @classmethod
+        def pre_bind(cls):
+            super().pre_bind()
+
+            @cls.c.add_assert_validator(err=LookupError)
+            def is_char(v):
+                return len(v) == 1
+
+    assert A('1').c == '1'
+    assert A('x').c == 'x'
+    with raises(ValueError):
+        A('12')
+
+
+def test_censor():
+    class A(RecordBase):
+        x: Annotated[str, check]
+
+        @classmethod
+        def pre_bind(cls):
+            super().pre_bind()
+
+            @cls.x.add_validator
+            def censor(v: str):
+                return v.replace('poop', '****')
+
+    assert A('foo').x == 'foo'
+    assert A('poopy').x == '****y'
+
+
+def test_hex():
+    class A(RecordBase):
+        x: Annotated[int, check]
+
+        @classmethod
+        def pre_bind(cls):
+            super().pre_bind()
+
+            @cls.x.add_coercer
+            def from_hex(v: str):
+                if isinstance(v, str) or v.startswith('0x'):
+                    return int(v, 16)
+                raise TypeError
+
+    assert A(15).x == 15
+    assert A('0xff').x == 255
+
+
+def test_post_new_modify():
+    class A(RecordBase, default_type_check=check):
+        a: int
+        b: int
+        c: int
+
+        def post_new(self):
+            self.a, self.b, self.c = sorted([self.a, self.b, self.c])
+
+        def __iter__(self):
+            yield from [self.a, self.b, self.c]
+
+    assert list(A(a=3, b=0, c=12)) == [0, 3, 12]
+
+
+def test_post_new_check():
+    class A(RecordBase, default_type_check=check):
+        a: int
+        b: int
+        c: int
+
+        def post_new(self):
+            assert self.a <= self.b <= self.c
+
+        def __iter__(self):
+            yield from [self.a, self.b, self.c]
+
+    assert list(A(a=0, b=3, c=12)) == [0, 3, 12]
+
+    with raises(AssertionError):
+        A(a=4, b=3, c=12)

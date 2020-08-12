@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy, deepcopy
 from typing import Optional
 
 from pytest import fixture, raises
@@ -22,10 +23,10 @@ def Point(request):
 def test_unary(Point):
     assert Point({'x': 1, 'y': 2}) == Point(x=1, y=2)
     assert Point('{"x": 1, "y": 2}') == Point(x=1, y=2)
-    assert Point(Point(x=1, y=2)) == Point(x=1, y=2)
+    assert Point(Point(x=1, y=2)) == Point(x=1, y=2) == copy(Point(x=1, y=2))
     if Point.is_frozen():
         p = Point(x=1, y=2)
-        assert Point(p) is p
+        assert Point(p) is p is copy(p)
     with raises(TypeError):
         Point((1, 2))
 
@@ -103,3 +104,18 @@ def test_unary_multiple(Point):
 
     with raises(TypeError):
         Point(mm())
+
+
+def test_copy(Node):
+    n = Node(n=Node(None))
+    nd = copy(n)
+    assert n == nd
+    assert n.n is nd.n
+
+
+def test_deepcopy(Node):
+    n = Node(n=Node(None))
+    nd = deepcopy(n)
+    assert n is not nd
+    assert n == nd
+    assert n.n is not nd.n
