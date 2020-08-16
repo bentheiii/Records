@@ -6,6 +6,7 @@ from records.utils.typing_compatible import Annotated
 from records.fillers.coercers import CallCoercion, MapCoercion, ComposeCoercer, ClassMethodCoercion
 from records.fillers.builtin_validators import Clamp, Within, FullMatch, Truth, Cyclic
 from records.fillers.validators import ValidationToken, AssertValidation, CallValidation, AssertCallValidation
+from records.select import SelectableConstructor
 from records.tags import Tag
 
 check = TypeCheckStyle.check
@@ -22,12 +23,13 @@ __all__ = [
     'Clamp', 'Within', 'FullMatch', 'Truth', 'Cyclic',
 
     'Tag',
+    'SelectableConstructor',
 
     'Eval', 'Loose', 'LooseUnpack', 'LooseUnpackMap', 'Whole', 'FromInteger',
     'SingletonFromFalsish', 'Encoding'
 ]
 
 # TODO:
-#  * customizable additional unaries (Point(1,2))
+#  * can we parse Enums with Eval?
 #  * handle inheritance
 #  * typevars?

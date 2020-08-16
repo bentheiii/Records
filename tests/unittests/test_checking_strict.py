@@ -103,12 +103,6 @@ def test_union2():
         A(2.3)
 
 
-def test_invalid_unions():
-    with raises(TypeError):
-        class A(RecordBase):
-            x: Union[Annotated[str, TypeCheckStyle.check], int]
-
-
 def test_nested():
     A = ACls(List[List[Number]])
     a = A([[2.0, 3, 6], [1, 2, 3], [-9, 5, 6]])

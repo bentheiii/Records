@@ -70,7 +70,7 @@ class UnionFiller(AnnotatedFiller):
             for c in current:
                 try:
                     intent = next(c)
-                except (TypeError, OverflowError, ValueError):
+                except Exception:
                     pass
                 else:
                     if intent == FillingIntent.attempt_validation:
@@ -109,9 +109,9 @@ class UnionFiller(AnnotatedFiller):
             sf.bind(owner_cls)
         if self.type_checking_style == TypeCheckStyle.hollow:
             if not all(sf.is_hollow() for sf in self.sub_fillers):
-                raise TypeError('hollow unions can only be used with hollow inner types')
+                self.type_checking_style = TypeCheckStyle.check
         else:
-            if any(sf.is_hollow() for sf in self.sub_fillers):  # pragma: no cover
+            if all(sf.is_hollow() for sf in self.sub_fillers):
                 raise TypeError('non-hollow unions cannot be used with hollow inner types')
 
     type_check = type_check_strict = None

@@ -12,7 +12,7 @@ lint:
 
 .PHONY: test
 test:
-	python -m pytest tests/unittests/ -x --cov=records --cov-report term-missing --no-cov-on-fail --cov-branch
+	python -m pytest tests/unittests/ -x --cov=records --cov-report term-missing --no-cov-on-fail
 
 
 .PHONY: all

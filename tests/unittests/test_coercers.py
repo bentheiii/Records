@@ -6,7 +6,7 @@ from typing import Iterable, Union, Sequence, Tuple, Deque, Mapping, DefaultDict
 from pytest import raises, mark
 
 from records import Annotated, Eval, Loose, RecordBase, TypeCheckStyle, LooseUnpack, LooseUnpackMap, Whole, FromInteger, \
-    SingletonFromFalsish, Encoding, ComposeCoercer, CallCoercion, MapCoercion, ClassMethodCoercion
+    SingletonFromFalsish, Encoding, ComposeCoercer, CallCoercion, MapCoercion, ClassMethodCoercion, check_strict, check
 from records.fillers.builtin_fillers.std_fillers import ToBytes
 
 
@@ -91,7 +91,7 @@ def test_whole():
     with raises(TypeError):
         a("15")
     with raises(TypeError):
-        a(1+1j)
+        a(1 + 1j)
 
 
 def test_from_bytes():
@@ -113,6 +113,7 @@ def test_to_bytes():
     a(300, bytearray([1, 300 - 256]))
     with raises(TypeError):
         a(25.6)
+
 
 def test_to_bytes_setlength():
     a = ACls(bytearray, ToBytes(1, byteorder='big'))
@@ -267,3 +268,32 @@ def test_bad_type():
     with raises(ValueError):
         class _(RecordBase):
             x: Annotated[int, Loose]
+
+
+def test_union_join():
+    a = ACls(Union[bool, float], Eval)
+    a('3.6', 3.6)
+    a(True, True)
+    a(1.0, 1.0)
+    a("True", True)
+    with raises(TypeError):
+        a("1")
+    with raises(TypeError):
+        a(1)
+
+
+def test_union_unequal():
+    class A(RecordBase):
+        x: Union[Annotated[int, check_strict, Eval], Annotated[str, check]]
+
+    assert A(x=5).x == 5
+    assert A(x="a").x == "a"
+    assert A(x="12").x == "12"
+
+    class A(RecordBase):
+        x: Union[Annotated[int, check_strict, Loose], Annotated[Pattern, check, CallCoercion(compile)]]
+
+    assert A(x=5).x == 5
+    assert A(x="a").x == compile("a")
+    with raises(ValueError):
+        A(x="12")

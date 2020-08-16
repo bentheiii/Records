@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
-from typing import Optional
+from typing import Optional, Sequence
 
-from pytest import fixture, raises
+from pytest import fixture, raises, mark
 
-from records import RecordBase, Annotated, check
+from records import RecordBase, Annotated, check, parser
+from records.select import SelectableConstructor
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])
@@ -119,3 +120,23 @@ def test_deepcopy(Node):
     assert n is not nd
     assert n == nd
     assert n.n is not nd.n
+
+
+@mark.parametrize('frozen', [True, False])
+def test_custom_parser(frozen):
+    class Point(RecordBase, frozen=frozen):
+        x: float
+        y: float
+        z: float = 0
+
+        @parser
+        @SelectableConstructor
+        @classmethod
+        def from_tuple(cls, v):
+            if isinstance(v, Sequence) and 2 <= len(v) <= 3:
+                return dict(
+                    zip('xyz', v)
+                )
+            raise TypeError
+
+    assert Point((1, 2)) == Point(x=1, y=2)
