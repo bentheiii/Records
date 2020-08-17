@@ -1,10 +1,10 @@
 from math import isclose
 from types import SimpleNamespace
-from typing import Dict, Hashable, List, Set, Final, ClassVar
+from typing import ClassVar, Dict, Final, Hashable, List, Set
 
 from pytest import fixture, mark, raises, skip
 
-from records import DefaultValue, Factory, RecordBase, Tag, Annotated
+from records import Annotated, DefaultValue, Factory, RecordBase, Tag
 from records.select import Select
 
 

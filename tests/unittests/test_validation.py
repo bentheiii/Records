@@ -1,10 +1,10 @@
-from typing import Iterable, Any, Union
+from typing import Any, Iterable, Union
 from unittest.mock import Mock
 
-from pytest import raises, mark, warns
+from pytest import mark, raises, warns
 
-from records import Annotated, Loose, RecordBase, TypeCheckStyle, Within, Clamp, Cyclic, \
-    FullMatch, Truth, AssertCallValidation, CallValidation, check
+from records import (Annotated, AssertCallValidation, CallValidation, Clamp, Cyclic, FullMatch, Loose, RecordBase,
+                     Truth, TypeCheckStyle, Within, check)
 
 
 def ACls(T, *args):
@@ -129,6 +129,7 @@ def test_char():
     assert A(b'x').c == b'x'
     with raises(ValueError):
         A('12')
+
 
 def test_char_var():
     class A(RecordBase):

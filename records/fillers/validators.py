@@ -1,7 +1,7 @@
-from abc import abstractmethod, ABC
-from logging import Logger
-from typing import Callable, Generic, TypeVar, Type, Any, Union, NoReturn
 import warnings
+from abc import ABC, abstractmethod
+from logging import Logger
+from typing import Any, Callable, Generic, NoReturn, Type, TypeVar, Union
 
 
 class ValidationToken:

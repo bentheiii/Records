@@ -3,9 +3,9 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from typing import Optional, Sequence
 
-from pytest import fixture, raises, mark
+from pytest import fixture, mark, raises
 
-from records import RecordBase, Annotated, check, parser
+from records import Annotated, RecordBase, check, parser
 from records.select import SelectableConstructor
 
 

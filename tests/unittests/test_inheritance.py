@@ -1,9 +1,8 @@
-from collections import defaultdict
 from typing import Hashable
 from unittest.mock import Mock
 
 from _pytest.recwarn import warns
-from pytest import raises, mark
+from pytest import mark, raises
 
 from records import Annotated, RecordBase, check
 

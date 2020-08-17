@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Set, Final, ClassVar, Dict
+from typing import ClassVar, Dict, Final, Set
 
-from records.tags import Tag
-from records.fillers import CallValidation, AssertCallValidation, CallCoercion
+from records.fillers import AssertCallValidation, CallCoercion, CallValidation
 from records.fillers.get_filler import get_filler
+from records.tags import Tag
 from records.utils.decorators import decorator_kw_method
-from records.utils.typing_compatible import split_annotation, get_origin, get_args
+from records.utils.typing_compatible import get_args, get_origin, split_annotation
 
 UNKNOWN_NAME = object()
 NO_DEFAULT = object()
@@ -102,4 +102,4 @@ class FieldDict(Dict[str, RecordField]):
     def filter_by_tag(self, key):
         if isinstance(key, Tag):
             return FieldDict((k, f) for (k, f) in self.items() if (key in f.tags))
-        raise TypeError
+        raise TypeError  # pragma: no cover

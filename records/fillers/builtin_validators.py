@@ -1,5 +1,5 @@
-from typing import Any, Union
 import re
+from typing import Any, Union
 
 from records.fillers.validators import AssertValidation, GlobalValidationToken
 

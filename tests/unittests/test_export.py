@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from io import StringIO, BytesIO
+from io import BytesIO, StringIO
 
 from pytest import fixture, mark
 
-from records import RecordBase, Annotated, check, Tag
+from records import Annotated, RecordBase, Tag, check
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])
@@ -43,9 +43,7 @@ def test_export_json(Point):
     assert p.to_json() == '{"x": 3, "y": 1}'
     assert p.to_json.export_with(include_defaults=True)() \
            == '{"x": 3, "y": 1, "z": 0}'
-    assert p.to_json \
-               .select(keys_to_remove='x') \
-               .export_with(include_defaults=True)() \
+    assert p.to_json.select(keys_to_remove='x').export_with(include_defaults=True)() \
            == '{"y": 1, "z": 0}'
     io = StringIO()
     p.to_json \
@@ -83,24 +81,31 @@ def test_unpickle_parse(Point):
     assert Point.from_pickle_io(io) == Point(x=3, y=1)
 
 
+secret = Tag('secret')
+
+
 @mark.parametrize('frozen', [True, False])
 def test_blacklist(frozen):
     class User(RecordBase, frozen=frozen):
         user_name: Annotated[str, check]
-        password: Annotated[str, check, Tag('secret')]
+        password: Annotated[str, check, secret]
 
     u = User(user_name="guest", password="swordfish")
     assert u.to_dict() == {"user_name": "guest", "password": "swordfish"}
-    assert u.to_dict(blacklist_tags=Tag('secret')) == {"user_name": "guest"}
+    assert u.to_dict(blacklist_tags=secret) == {"user_name": "guest"}
+
+
+a = Tag('a')
+b = Tag('b')
 
 
 @mark.parametrize('frozen', [True, False])
 def test_whitelist(frozen):
     class Point(RecordBase, frozen=frozen):
-        x: Annotated[int, check, Tag('a')]
-        y: Annotated[int, check, Tag('b')]
-        z: Annotated[int, check, Tag('a')] = 0
-        w: Annotated[int, check, Tag('b')] = 0
+        x: Annotated[int, check, a]
+        y: Annotated[int, check, b]
+        z: Annotated[int, check, a] = 0
+        w: Annotated[int, check, b] = 0
 
     u = Point(x=3, y=2)
     assert u.to_dict() == {"x": 3, "y": 2}

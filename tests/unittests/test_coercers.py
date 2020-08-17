@@ -1,13 +1,14 @@
-from collections import namedtuple, deque, defaultdict
+from collections import defaultdict, deque, namedtuple
 from enum import Enum
 from fractions import Fraction
 from re import Pattern, compile
-from typing import Iterable, Union, Sequence, Tuple, Deque, Mapping, DefaultDict
+from typing import DefaultDict, Deque, Iterable, Mapping, Sequence, Tuple, Union
 
-from pytest import raises, mark
+from pytest import mark, raises
 
-from records import Annotated, Eval, Loose, RecordBase, TypeCheckStyle, LooseUnpack, LooseUnpackMap, Whole, FromInteger, \
-    SingletonFromFalsish, Encoding, ComposeCoercer, CallCoercion, MapCoercion, ClassMethodCoercion, check_strict, check
+from records import (Annotated, CallCoercion, ClassMethodCoercion, ComposeCoercer, Encoding, Eval, FromInteger, Loose,
+                     LooseUnpack, LooseUnpackMap, MapCoercion, RecordBase, SingletonFromFalsish, TypeCheckStyle, Whole,
+                     check, check_strict)
 from records.fillers.builtin_fillers.std_fillers import ToBytes
 
 

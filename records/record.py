@@ -3,14 +3,13 @@ from __future__ import annotations
 from collections import ChainMap
 from copy import deepcopy
 from inspect import getattr_static
-from typing import AbstractSet, ClassVar, Dict, TypeVar, Optional, Mapping, Any, Union, Container, List, \
-    Callable
+from typing import AbstractSet, Any, Callable, ClassVar, Container, List, Mapping, Optional, TypeVar, Union
 from warnings import warn
 
 import records.extras as extras
-from records.field import RecordField, NO_DEFAULT, SkipField, FieldDict
+from records.field import NO_DEFAULT, FieldDict, RecordField, SkipField
 from records.fillers.filler import TypeCheckStyle
-from records.select import SelectableConstructor, SelectableShortcutConstructor, Exporter, NoArgExported
+from records.select import Exporter, NoArgExported, SelectableConstructor, SelectableShortcutConstructor
 from records.tags import Tag
 from records.utils.typing_compatible import get_type_hints
 
@@ -302,7 +301,7 @@ class RecordBase:
         for m in cls._parsers:
             try:
                 r = m(v)
-            except Exception as e:
+            except Exception:
                 pass
             else:
                 successes.append(r)

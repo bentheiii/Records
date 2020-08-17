@@ -1,8 +1,8 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from functools import partial
 from inspect import isabstract
 from math import isclose
-from numbers import Rational, Real, Complex
+from numbers import Complex, Rational, Real
 from typing import Any, Callable, Dict, Generic, Type, TypeVar
 
 from records.fillers.builtin_fillers.recurse import GetFiller

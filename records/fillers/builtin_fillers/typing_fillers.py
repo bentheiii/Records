@@ -3,7 +3,7 @@ import contextlib
 from collections import defaultdict, deque
 from collections.abc import Callable as CallableBase
 from itertools import chain, islice
-from typing import Any, Generator, Sequence, Union, TypeVar
+from typing import Any, Generator, Sequence, TypeVar, Union
 
 from records.fillers.builtin_fillers.recurse import GetFiller
 from records.fillers.filler import AnnotatedFiller, Filler, FillingIntent, TypeCheckStyle, TypeMatch

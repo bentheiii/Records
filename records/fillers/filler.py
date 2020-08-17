@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from enum import Enum, IntEnum, auto
-from typing import Any, Callable, Generator, Generic, List, Protocol, TypeVar, Iterable, Union, Type, Optional
+from typing import Any, Callable, Generator, Generic, List, Optional, Protocol, Type, TypeVar, Union
 
 from records.fillers.coercers import CoercionToken
 from records.fillers.validators import ValidationToken

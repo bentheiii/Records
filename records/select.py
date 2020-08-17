@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from itertools import chain
-from typing import Iterable, Union, Tuple, Mapping, Any, Generic, TypeVar, Type, Optional, Callable, NamedTuple, \
-    Generator
+from typing import Any, Callable, Generic, Iterable, Mapping, Optional, Tuple, Type, TypeVar, Union
 
 
 class Select:

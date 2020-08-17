@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Dict, Iterable, List, Literal, Mapping, Sequence, Tuple, Type, Union, NewType, Any, Callable
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, NewType, Sequence, Tuple, Type, Union
 
 from pytest import mark, raises
 
@@ -221,7 +221,7 @@ def test_invalid_gen1():
             x: Iterable[Annotated[str, TypeCheckStyle.check]]
 
 
-@mark.parametrize('T',[callable, Callable])
+@mark.parametrize('T', [callable, Callable])
 def test_callable(T):
     A = ACls(T)
     a = A(int)
