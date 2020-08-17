@@ -1,10 +1,10 @@
 from math import isclose
 from types import SimpleNamespace
-from typing import Dict, Hashable, List, Set, Final
+from typing import Dict, Hashable, List, Set, Final, ClassVar
 
 from pytest import fixture, mark, raises, skip
 
-from records import DefaultValue, Factory, RecordBase
+from records import DefaultValue, Factory, RecordBase, Tag, Annotated
 from records.select import Select
 
 
@@ -295,3 +295,27 @@ def test_circular():
         x: 'A'
 
     assert A(A(None)).x.x is None
+
+
+def test_classvar():
+    class A(RecordBase):
+        x: 'A'
+        y: ClassVar[int]
+
+    assert A(A(None)).x.x is None
+    assert 'y' not in A._fields
+
+
+def test_nofield():
+    with raises(ValueError):
+        class A(RecordBase):
+            pass
+
+
+def test_get_by_tag():
+    class A(RecordBase):
+        a0: Annotated[int, Tag(0)]
+        b1: Annotated[int, Tag(1)]
+        c0: Annotated[int, Tag(0)]
+
+    assert A._fields.filter_by_tag(Tag(0)) == {'a0': A.a0, 'c0': A.c0}

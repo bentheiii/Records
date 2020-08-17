@@ -1,7 +1,8 @@
 from records.fillers.builtin_fillers.std_fillers import (Encoding, Eval, SingletonFromFalsish, FromInteger, Loose,
                                                          LooseUnpack, LooseUnpackMap, Whole)
 from records.fillers.filler import TypeCheckStyle
-from records.record import DefaultValue, Factory, RecordBase, parser
+from records.record import RecordBase, parser
+from records.field import DefaultValue, Factory
 from records.utils.typing_compatible import Annotated
 from records.fillers.coercers import CallCoercion, MapCoercion, ComposeCoercer, ClassMethodCoercion
 from records.fillers.builtin_validators import Clamp, Within, FullMatch, Truth, Cyclic
@@ -30,6 +31,4 @@ __all__ = [
 ]
 
 # TODO:
-#  * can we parse Enums with Eval?
-#  * handle inheritance
 #  * typevars?

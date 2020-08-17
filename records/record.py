@@ -3,28 +3,23 @@ from __future__ import annotations
 from collections import ChainMap
 from copy import deepcopy
 from inspect import getattr_static
-from typing import AbstractSet, ClassVar, Dict, Type, TypeVar, Optional, Mapping, Any, Set, Union, Container, List, \
+from typing import AbstractSet, ClassVar, Dict, TypeVar, Optional, Mapping, Any, Union, Container, List, \
     Callable
 from warnings import warn
 
 import records.extras as extras
-from records.fillers.validators import CallValidation, AssertCallValidation
-from records.fillers.coercers import CallCoercion
+from records.field import RecordField, NO_DEFAULT, SkipField, FieldDict
 from records.fillers.filler import TypeCheckStyle
-from records.fillers.get_filler import get_filler
 from records.select import SelectableConstructor, SelectableShortcutConstructor, Exporter, NoArgExported
-from records.utils.decorators import decorator_kw_method
-from records.utils.typing_compatible import get_args, get_origin, get_type_hints, split_annotation
 from records.tags import Tag
-
-UNKNOWN_NAME = object()
-NO_DEFAULT = object()
-NO_ARG = object()
+from records.utils.typing_compatible import get_type_hints
 
 try:
     from typing import Final
 except ImportError:  # pragma: no cover
     Final = object()
+
+NO_ARG = object()
 
 
 def parser(func):
@@ -32,98 +27,8 @@ def parser(func):
     return func
 
 
-class Pass:
-    pass
-
-
-class SkipField(Exception):
-    pass
-
-
 class UnaryFailure(TypeError):
     pass
-
-
-class Factory:
-    def __init__(self, func):
-        self.func = func
-
-
-class DefaultValue:
-    def __init__(self, value):
-        self.value = value
-
-
-class RecordField:
-    AUTO_FACTORY_TYPES = (dict, list, set)
-
-    def __init__(self, *, filler, owner, name, default):
-        self.filler = filler
-        self.name = name
-        default, is_factory = self._apply_factory(default)
-
-        self.default = default
-        self.default_is_factory = is_factory
-        self.owner: Type[RecordBase] = owner
-
-        self.tags: Set[Tag] = set()
-
-    def make_default(self):
-        if self.default_is_factory:
-            return self.default()
-        return self.default
-
-    @property
-    def has_default(self):
-        return self.default is not NO_DEFAULT
-
-    @classmethod
-    def _apply_factory(cls, default):
-        if isinstance(default, DefaultValue):
-            return default.value, False
-        if isinstance(default, Factory):
-            return default.func, True
-        if isinstance(default, cls.AUTO_FACTORY_TYPES):
-            return default.copy, True
-        return default, False
-
-    @classmethod
-    def from_type_hint(cls, th, *, owner, **kwargs) -> RecordField:
-        if th is Final:
-            raise TypeError('raw Final cannot be use inside records')
-        origin, args = split_annotation(th)
-        meta_org = get_origin(origin)
-        if meta_org == ClassVar:
-            raise SkipField
-        if meta_org == Final:
-            if not owner.is_frozen():
-                raise TypeError('cannot declare Final field in non-frozen Record')
-            ret = cls.from_type_hint(get_args(origin)[0], owner=owner, **kwargs)
-        else:
-            filler = get_filler(th)
-            ret = cls(filler=filler, owner=owner, **kwargs)
-        for arg in args:
-            ret._apply(arg)
-        return ret
-
-    @decorator_kw_method
-    def add_validator(self, func, **kwargs):
-        self.filler.apply(CallValidation(func, **kwargs))
-        return func
-
-    @decorator_kw_method
-    def add_assert_validator(self, func, **kwargs):
-        self.filler.apply(AssertCallValidation(func, **kwargs))
-        return func
-
-    @decorator_kw_method
-    def add_coercer(self, func, **kwargs):
-        self.filler.apply(CallCoercion(func, **kwargs))
-        return func
-
-    def _apply(self, token):
-        if isinstance(token, Tag):
-            self.tags.add(token)
 
 
 T = TypeVar('T')
@@ -133,7 +38,7 @@ T = TypeVar('T')
 class RecordBase:
     __slots__ = '_hash',
 
-    _fields: ClassVar[Dict[str, RecordField]]
+    _fields: ClassVar[FieldDict]
     _required_keys: ClassVar[AbstractSet[str]]
     _optional_keys: ClassVar[AbstractSet[str]]
     _default_type_check_style: ClassVar[TypeCheckStyle]
@@ -141,7 +46,7 @@ class RecordBase:
     _unary_parse: ClassVar[bool]
     _parsers: ClassVar[List[Callable]]
 
-    def __init_subclass__(cls, *, frozen: bool = False, unary_parse: Optional[bool] = None,
+    def __init_subclass__(cls, *, frozen: bool = None, unary_parse: Optional[bool] = None,
                           default_type_check=TypeCheckStyle.hollow, **kwargs):
         super().__init_subclass__(**kwargs)
 
@@ -150,8 +55,13 @@ class RecordBase:
 
         cls._frozen = frozen
         cls._default_type_check_style = default_type_check
-        cls._fields = {}
+        cls._fields = FieldDict()
+        # in bodyless classes, __annotations__ refers to parent
+        own_annotations = cls.__dict__.get('__annotations__', {})
         for name, type_hint in get_type_hints(cls, localns={cls.__name__: cls, cls.__qualname__: cls}).items():
+            if name not in own_annotations:
+                # type hints also give things from super classes which we don't want
+                continue
             try:
                 field = RecordField.from_type_hint(type_hint,
                                                    owner=cls, name=name,
@@ -162,19 +72,29 @@ class RecordBase:
                 cls._fields[name] = field
                 setattr(cls, name, field)
 
+        parents = [b for b in cls.__bases__ if issubclass(b, RecordBase) and b != RecordBase]
+        for parent in parents:
+            for k, field in parent._fields.items():
+                if cls._fields.setdefault(k, field) is not field:
+                    raise ValueError(f'cannot override inherited field {k}')
+
+        if cls.is_frozen() \
+                and any(b for b in cls.__bases__ if b.__init__ not in (RecordBase.__init__, object.__init__)):
+            warn(f'class {cls} has parents that implement __init__, the initializer will not be called!')
+
+        if not cls._fields:
+            raise ValueError(f'class {cls.__name__} has no fields')
+
         cls._required_keys = {k for (k, f) in cls._fields.items() if not f.has_default}
         cls._optional_keys = {k for k in cls._fields if k not in cls._required_keys}
         if unary_parse is None:
             unary_parse = len(cls._required_keys) != 1
         cls._unary_parse = unary_parse
         if frozen:
-            def __setattr__(s, a, value):
-                if a in RecordBase.__slots__:
-                    return super(cls, s).__setattr__(a, value)
-                raise TypeError(f'{cls.__qualname__} is frozen')
-
-            cls.__setattr__ = __setattr__
+            cls.__setattr__ = RecordBase.__setattr__
+            cls.__hash__ = RecordBase.__hash__
         else:
+            cls.__setattr__ = object.__setattr__
             cls.__hash__ = None
 
         cls.pre_bind()
@@ -250,7 +170,7 @@ class RecordBase:
         pass
 
     def __init__(self, arg=NO_ARG, **kwargs):
-        pass
+        super().__init__()
 
     def __repr__(self, **kwargs):
         params_parts = []
@@ -315,9 +235,16 @@ class RecordBase:
         return cls._default_type_check_style
 
     def __hash__(self):
+        # note: if the class is non-frozen, this function will be overridden
         if self._hash is None:
             self._hash = hash(tuple(self.to_dict().values()))
         return self._hash
+
+    def __setattr__(self, a, value):
+        # note: if the class is non-frozen, this function will be overridden
+        if a in RecordBase.__slots__:
+            return super().__setattr__(a, value)
+        raise TypeError(f'{type(self).__qualname__} is frozen')
 
     def __getnewargs_ex__(self):
         return (), self.to_dict()

@@ -9,7 +9,7 @@ class Tag:
         return hash(self.inner)
 
     def __eq__(self, other):
-        return type(other) == type(self)\
+        return type(other) == type(self) \
                and self.inner == other.inner
 
     def __repr__(self):  # pragma: no cover

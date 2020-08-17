@@ -14,17 +14,26 @@ T = TypeVar('T')
 
 class Eval(GlobalCoercionToken):
     def __init__(self, *args, **kwargs):
+        if args and args[0] is ...:
+            self.add_bound = True
+            args = args[1:]
+        else:
+            self.add_bound = False
         self.kwargs = kwargs
         self.kwargs.update(
             (k.__name__, k) for k in args
         )
 
     def __call__(self, origin, filler):
+        ns = self.kwargs
+        if self.add_bound:
+            ns = {**self.kwargs, origin.__name__: origin}
+
         def ret(v):
             if not isinstance(v, str):
                 raise TypeError
             try:
-                ret = eval(v, {'__builtins__': self.kwargs})
+                ret = eval(v, {'__builtins__': ns})
             except Exception as e:
                 raise TypeError from e
 

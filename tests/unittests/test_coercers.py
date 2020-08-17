@@ -1,4 +1,5 @@
 from collections import namedtuple, deque, defaultdict
+from enum import Enum
 from fractions import Fraction
 from re import Pattern, compile
 from typing import Iterable, Union, Sequence, Tuple, Deque, Mapping, DefaultDict
@@ -297,3 +298,29 @@ def test_union_unequal():
     assert A(x="a").x == compile("a")
     with raises(ValueError):
         A(x="12")
+
+
+def test_eval_enum():
+    class E(Enum):
+        x = 1
+        y = 2
+        z = 3
+
+    a = ACls(E, Eval(E))
+    a('E(1)', E(1))
+    a('E.x', E.x)
+    with raises(TypeError):
+        a('1')
+
+
+def test_eval_ellipsis():
+    class E(Enum):
+        x = 1
+        y = 2
+        z = 3
+
+    a = ACls(E, Eval(...))
+    a('E(1)', E(1))
+    a('E.x', E.x)
+    with raises(TypeError):
+        a('1')
