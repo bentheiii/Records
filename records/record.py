@@ -9,7 +9,7 @@ from warnings import warn
 import records.extras as extras
 from records.field import NO_DEFAULT, FieldDict, RecordField, SkipField
 from records.fillers.filler import TypeCheckStyle
-from records.select import Exporter, NoArgExported, SelectableConstructor, SelectableShortcutConstructor
+from records.select import Exporter, NoArgExporter, SelectableConstructor, SelectableShortcutConstructor
 from records.tags import Tag
 from records.utils.typing_compatible import get_type_hints
 
@@ -313,7 +313,7 @@ class RecordBase:
 
         return next(iter(successes))
 
-    @NoArgExported
+    @NoArgExporter
     @staticmethod
     def to_dict(v) -> Mapping[str, Any]:
         return v

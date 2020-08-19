@@ -1,4 +1,4 @@
-# Records
+from math import sqrt# Records
 Records is a python library that makes powerful structure classes easy.
 
 ## Simplest Example
@@ -44,7 +44,7 @@ class Person(RecordBase):
     # field tokens can even be more complex in case of nested field types
     names_of_children: Annotated[List[Annotated[int, check, Eval]], check]  # the list will be checked to be a list, and each item individually will be checked or coerced to be an int using the built-in Eval coercer.
     
-    # validators can also be added after declaring them with pre_bind
+    # validators can also be added after declaration with pre_bind
     @classmethod
     def pre_bind(cls):
         @cls.last_name.add_validator
@@ -58,5 +58,65 @@ class Person(RecordBase):
             raise ValueError("children mismatch")
 ```
 ## Parsing
+Records can also be parsed from various python primitives. Including parsing from `dict`s, jsons, and even generic namepaces.
+```python
+from types import SimpleNamespace
+from records import RecordBase, check
+
+class User(RecordBase, default_type_check=check):
+    name: str
+    password: str
+    age: int = 18
+    
+
+print(User.from_mapping({"name": "richard", "password": "swordfish"}))
+print(User.from_json('{"name": "richard", "password": "swordfish"})'))
+n = SimpleNamespace(user="rich", password="ard", age= 7)
+print(User.from_instance(n))
+
+# parsing can even be done if you expect misnamed fields!
+from_upper_dict = User.from_mapping.select(keys_to_rename=[('user','name')], keys_to_remove=['favorite_color'])
+print(from_upper_dict({'user':'richard', 'password': 'pw', 'favorite_color': 'red'}))
+```
+
+You can also define your own parsers and even use them in construction!
+```python
+from math import sqrt
+from records import RecordBase, check, SelectableConstructor, parser
+
+class Point(RecordBase, default_type_check=check):
+    x: float
+    y: float
+    z: float = 0
+    
+    @parser
+    @SelectableConstructor
+    @classmethod
+    def from_tuple(cls, v):
+        return {'x':v[0], 'y':v[1], 'z':v[2] if len(v) > 2 else 0}
+
+    @property
+    def norm(self):
+        return sqrt(self.x**2 + self.y**2 + self.z**2)
+
+p = Point([2,3,6])
+print(p.norm)  # 7
+```
 ## Exporting
-## Extending
+Records can also be exporting to various formats (same as parsing).
+```python
+from records import RecordBase, check
+
+class Point(RecordBase, default_type_check=check):
+    x: float
+    y: float
+    z: float
+
+p = Point(x=2, y=3, z=6)
+print(p.to_dict())
+print(p.to_pickle())
+#  again, we can select to change the keys
+print(
+    p.to_json.select(keys_to_add=[('w',0)])()
+)
+```

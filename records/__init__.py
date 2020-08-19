@@ -31,6 +31,7 @@ __all__ = [
 ]
 
 # TODO:
+#  * fill on assign?
 #  * ordering
 #  * add argument to Loose to only accept inputs of certain types
 #  * typevars?

@@ -219,7 +219,7 @@ class Exporter(SelectableExporter):
         return self.func(m, *args, **kwargs)
 
 
-class NoArgExported(Exporter):
+class NoArgExporter(Exporter):
     class Bound(Exporter.Bound):
         def __call__(self, *args, **kwargs):
             return self.descriptor.run(self.owner, (), {}, (*self.export_args, *args), {**self.export_kwargs, **kwargs},
