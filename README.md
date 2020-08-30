@@ -82,7 +82,7 @@ print(from_upper_dict({'user':'richard', 'password': 'pw', 'favorite_color': 're
 You can also define your own parsers and even use them in construction!
 ```python
 from math import sqrt
-from records import RecordBase, check, SelectableConstructor, parser
+from records import RecordBase, check, SelectableFactory, parser
 
 class Point(RecordBase, default_type_check=check):
     x: float

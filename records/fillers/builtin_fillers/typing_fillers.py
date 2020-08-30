@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import collections.abc as abstract_collections
 import contextlib
 from collections import defaultdict, deque
 from collections.abc import Callable as CallableBase
 from itertools import chain, islice
-from typing import Any, Generator, Sequence, TypeVar, Union
+from typing import Any, List, Optional, Sequence, TypeVar, Union
 
 from records.fillers.builtin_fillers.recurse import GetFiller
-from records.fillers.filler import AnnotatedFiller, Filler, FillingIntent, TypeCheckStyle, TypeMatch
+from records.fillers.filler import (AnnotatedFiller, Filler, TypeCheckingProcess, TypeCheckStyle, TypeMatch,
+                                    TypePassKind, ValidationProcess)
 from records.fillers.get_filler import get_annotated_filler, get_filler
 from records.utils.typing_compatible import get_args, get_origin
 
@@ -17,20 +20,49 @@ except ImportError:  # pragma: no cover
     Literal = no_eq
 
 
-# noinspection PyAbstractClass
-class PartialFill(Generator):
-    def __init__(self, inner: Generator, origin):
-        self.origin = origin
-        self.inner = inner
-        self.latest = next(inner)
+class UnionTypeCheckingProcess(TypeCheckingProcess):
+    def __init__(self, owner: UnionFiller, arg):
+        self.owner = owner
+        self.arg = arg
 
-    def send(self, value):
-        self.latest = self.inner.send(value)
-        return self.latest
+    def __call__(self):
+        succeeded: Optional[List[ValidationProcess]] = None
+        succeeded_kind: Optional[TypePassKind] = None
+        for sf in self.owner.sub_fillers:
+            try:
+                validation: ValidationProcess = sf.fill(self.arg)()
+            except Exception:
+                continue
+            if succeeded_kind is None or validation.type_pass < succeeded_kind:
+                succeeded = [validation]
+                succeeded_kind = validation.type_pass
+            elif succeeded_kind == validation.type_pass:
+                succeeded.append(validation)
+        if not succeeded:
+            raise TypeError('no type checkers succeeded')
 
-    def throw(self, typ, val=..., tb=...):  # pragma: no cover
-        self.latest = self.inner.throw(typ, val, tb)
-        return self.latest
+        return UnionValidationProcess(self.owner, succeeded, succeeded_kind)
+
+
+class UnionValidationProcess(ValidationProcess):
+    def __init__(self, owner: UnionFiller, validations: List[ValidationProcess], type_pass: TypePassKind):
+        self.owner = owner
+        self.validations = validations
+        self.type_pass = type_pass
+
+    def __call__(self):
+        good_results = []
+        for validator_process in self.validations:
+            try:
+                result = validator_process()
+            except Exception:
+                continue
+            good_results.append((result, validator_process))
+        if not good_results:
+            raise ValueError('no validators succeeded')
+        elif len(good_results) > 1:
+            raise ValueError(f'multiple validator success: {[gvt for (_, gvt) in good_results]}')
+        return good_results[0][0]
 
 
 class UnionFiller(AnnotatedFiller):
@@ -46,58 +78,8 @@ class UnionFiller(AnnotatedFiller):
 
     def fill(self, arg):
         if self.type_checking_style == TypeCheckStyle.hollow:
-            return (yield from super().fill(arg))
-        pending = [PartialFill(sf.fill(arg), org) for sf, org in zip(self.sub_fillers, self.sub_types)]
-
-        while pending:
-            current_score = float('inf')
-            current = []
-            rest = []
-
-            for sg in pending:
-                if sg.latest < current_score:
-                    rest.extend(current)
-                    current = [sg]
-                    current_score = sg.latest
-                elif sg.latest > current_score:
-                    rest.append(sg)
-                else:
-                    current.append(sg)
-
-            pending = rest
-            good_typechecks = []
-            yield current_score
-            for c in current:
-                try:
-                    intent = next(c)
-                except Exception:
-                    pass
-                else:
-                    if intent == FillingIntent.attempt_validation:
-                        good_typechecks.append(c)
-                    pending.append(c)
-            if good_typechecks:
-                break
-        else:
-            raise TypeError('no type checkers matched')
-
-        good_validations = []
-        yield FillingIntent.attempt_validation
-        for c in good_typechecks:
-            try:
-                next(c)
-            except StopIteration as e:
-                good_validations.append((c.origin, e.value))
-            except Exception:
-                pass
-            else:  # pragma: no cover
-                raise BaseException(f'filler of origin {c.origin} did not return or raise after validation')
-
-        if not good_validations:
-            raise ValueError('no validators succeeded')
-        elif len(good_validations) > 1:
-            raise ValueError(f'multiple validator success: {[gvt for (gvt, _) in good_validations]}')
-        return good_validations[0][-1]
+            return super().fill(arg)
+        return UnionTypeCheckingProcess(self, arg)
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
@@ -144,8 +126,8 @@ class WrapperFiller(Filler):
     def __init__(self, origin, args):
         self.inner_filler = get_annotated_filler(origin, args)
 
-    def fill(self, arg) -> Generator[FillingIntent, None, Any]:
-        return (yield from self.inner_filler.fill(arg))
+    def fill(self, arg):
+        return self.inner_filler.fill(arg)
 
     def bind(self, owner_cls):
         super().bind(owner_cls)

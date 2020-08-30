@@ -141,7 +141,8 @@ def test_hybrid_mixin_new(decl):
 
 
 @mark.parametrize('decl', [False, True])
-def test_hybrid_mixin_init(decl):
+@mark.parametrize('frozen', [False, True])
+def test_hybrid_mixin_init(decl, frozen):
     class M:
         if decl:
             x: int
@@ -155,18 +156,20 @@ def test_hybrid_mixin_init(decl):
     class S(RecordBase):
         x: int
 
-    class A(S, M):
-        pass
+    with warns(UserWarning):
+        class A(S, M, frozen=frozen):
+            pass
 
     a = A(12)
 
     assert a.x == 12
     assert a.xsq() == 144
-    assert a.a == "a"
+    assert not hasattr(a, 'a')
 
 
 @mark.parametrize('decl', [False, True])
-def test_hybrid_mixin_init_warns(decl):
+@mark.parametrize('frozen', [False, True])
+def test_hybrid_mixin_init_warns(decl, frozen):
     d = Mock()
 
     class M:
@@ -183,13 +186,13 @@ def test_hybrid_mixin_init_warns(decl):
         x: Annotated[int, check]
 
     with warns(UserWarning):
-        class A(S, M, frozen=True, unary_parse=True):
+        class A(S, M, frozen=frozen, unary_parse=True):
             pass
 
     a = A(12)
 
     assert a.x == 12
     assert a.xsq() == 144
-    assert d.call_count == 1
-    assert A(a) is a
-    assert d.call_count == 2
+    assert d.call_count == 0
+    assert A(a) == a
+    assert d.call_count == 0

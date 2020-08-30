@@ -2,6 +2,10 @@ from typing import Hashable
 
 
 class Tag:
+    """
+    A tag to mark a Field as belonging to a category. Tags encapsulate a single hashable object and implement only
+     hashing and equality.
+    """
     def __init__(self, x: Hashable):
         self.inner = x
 

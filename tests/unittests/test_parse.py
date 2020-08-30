@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 from pytest import fixture, mark, raises
 
 from records import Annotated, RecordBase, check, parser
-from records.select import SelectableConstructor
+from records.select import SelectableFactory
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])
@@ -130,7 +130,7 @@ def test_custom_parser(frozen):
         z: float = 0
 
         @parser
-        @SelectableConstructor
+        @SelectableFactory
         @classmethod
         def from_tuple(cls, v):
             if isinstance(v, Sequence) and 2 <= len(v) <= 3:

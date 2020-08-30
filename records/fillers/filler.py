@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from abc import abstractmethod
 from enum import Enum, IntEnum, auto
-from typing import Any, Callable, Generator, Generic, List, Optional, Protocol, Type, TypeVar, Union
+from typing import Any, Callable, Generic, List, Optional, TypeVar
 
 from records.fillers.coercers import CoercionToken
+from records.fillers.util import _as_instance
 from records.fillers.validators import ValidationToken
 
 """
@@ -39,100 +42,151 @@ Each field filling has multiple stages:
 
 
 class TypeCheckStyle(Enum):
+    """
+    Different ways to handle type-checking in fillers.
+    """
     default = auto()
+    """signifies that the filler should assume the type checking style of the owner record class upon binding.
+     It is an error to have this style after binding"""
     hollow = auto()
+    """signifies that no type checking or coercion should be performed"""
     check = auto()
+    """signifies the filler should accept any argument of the type or its subclasses as valid arguments,
+     and otherwise to fall back on coercion"""
     check_strict = auto()
+    """signifies the filler should accept any argument of the exact type as valid arguments, and otherwise to fall
+     back on coercion"""
 
 
-class FillingIntent(IntEnum):
-    attempt_no_coerce_strict = 0
-    attempt_no_coerce = 1
-    attempt_coerce = 2
-    attempt_hollow = 3
-
-    attempt_validation = -1
-
-
-class TypeMatch(Enum):
-    exact = TypeCheckStyle.check_strict.value
-    inexact = TypeCheckStyle.check.value
+class TypePassKind(IntEnum):
+    """
+    an inner enum to signify how a value passed a filler's type checking
+    """
+    no_coerce_strict = 0
+    no_coerce = 1
+    coerce = 2
+    hollow = 3
 
 
 T = TypeVar('T')
 
 
-class Filler(Protocol[T]):
+class TypeCheckingProcess(Generic[T]):
+    """
+    an abstract class representing type validation of a filling
+    """
+
     @abstractmethod
-    def fill(self, arg) -> Generator[FillingIntent, None, T]:
+    def __call__(self) -> ValidationProcess[T]:
+        """
+        process the type validation
+        :return: a ``ValidationProcess`` representing the remainder of the validation
+        """
+        pass
+
+
+class ValidationProcess(Generic[T]):
+    """
+    an abstract class representing value validation of a filling
+    """
+    type_pass: TypePassKind
+    """the passing kind of the validation, how did the value succeed in type valdiation"""
+
+    def __call__(self) -> T:
+        """
+        process the value validation
+        :return: the final, validated, filled value
+        """
+        pass
+
+
+class Filler(Generic[T]):
+    """
+    A base class for all fillers who must constrain arbitrary arguments to a (possibly annotated) storage type
+    """
+
+    @abstractmethod
+    def fill(self, arg) -> TypeCheckingProcess[T]:
+        """
+        Begin filling a value to match the filler's type checking and validation
+        :param arg: the initial value to use
+        :return: a ``TypeCheckingProcess`` representing an uninitialized filling process
+        """
         pass
 
     @abstractmethod
     def bind(self, owner_cls):
+        """
+        Bind a filler and associate it with a class. After binding, no new tokens can be applied to the filler.
+        :param owner_cls: the owner record class to associate the filler with.
+        """
+        # todo prevent re-binding
         pass
 
     @abstractmethod
     def is_hollow(self) -> bool:
+        """
+        :return: Whether or not the filler is "hollow". A hollow filler is one that accepts input of any type.
+        """
         pass
 
     @abstractmethod
     def apply(self, token):
+        """
+        Apply a token to a filler.
+        :param token: The token provided to the filler through `Annotated`.
+        """
         # todo prevent applying if already binded
         pass
 
-    def __call__(self, arg):
-        try:
-            i = iter(self.fill(arg))
-            while True:
-                next(i)
-        except StopIteration as si:
-            return si.value
+    def __call__(self, arg) -> T:
+        """
+        Coerce and validate an argument by the filler
+        :param arg: The argument to fill with
+        :return: `arg` after coercion and validation.
+        """
+        tc = self.fill(arg)
+        return tc()()
+
+
+class TypeMatch(Enum):
+    """
+    How a value matches a target storage type
+    """
+    exact = auto()
+    """
+    An exact type match
+    """
+    inexact = auto()
+    """
+    An inexact type match
+    """
 
 
 class AnnotatedFiller(Filler, Generic[T]):
+    """
+    A simple parent class for many filler subclasses
+    """
+
     def __init__(self, origin, args):
+        """
+        :param origin: The origin of the `Annotated` storage type
+        :param args: The arguments of the `Annotated` storage type
+        .. note::
+            If the storage type is not an `Annotated`, `origin` should be the storage type and `args` should be an
+            empty tuple.
+        """
         self.type_checking_style = TypeCheckStyle.default
         self.origin = origin
         self.args = args
         self.coercers: List[Callable[[Any], T]] = []
         self.validators: List[Callable[[T], T]] = []
 
-    def fill(self, arg) -> Generator[FillingIntent, None, T]:
+    def fill(self, arg):
         if self.type_checking_style == TypeCheckStyle.default:  # pragma: no cover
             raise Exception
 
-        if self.type_checking_style == TypeCheckStyle.hollow:
-            yield FillingIntent.attempt_hollow
-        else:
-            tp = self.type_check(arg)
-            if tp == TypeMatch.exact:
-                yield FillingIntent.attempt_no_coerce_strict
-            elif tp == TypeMatch.inexact and self.type_checking_style == TypeCheckStyle.check:
-                yield FillingIntent.attempt_no_coerce
-            else:
-                # perform coercion
-                yield FillingIntent.attempt_coerce
-                if not self.coercers:
-                    raise TypeError(f'failed type checking for value of type {type(arg)}')
-                for i, coercer in enumerate(self.coercers):
-                    try:
-                        arg = coercer(arg)
-                        tc = self.type_check(arg)
-                        if tc is None \
-                                or (tc == TypeMatch.inexact and self.type_checking_style != TypeCheckStyle.check):
-                            raise TypeError(f'coercer returned value of wrong type: {type(arg)}')
-                    except Exception:
-                        if i == len(self.coercers) - 1:
-                            raise
-                    else:
-                        break
-
-        # type checking done, perform validation
-        yield FillingIntent.attempt_validation
-        for validator in self.validators:
-            arg = validator(arg)
-
-        return arg
+        return AnnotatedTypeCheckingProcess(self, arg)
 
     def bind(self, owner_cls):
         for arg in self.args:
@@ -145,30 +199,103 @@ class AnnotatedFiller(Filler, Generic[T]):
     def apply(self, token):
         if isinstance(token, TypeCheckStyle):
             self.type_checking_style = token
-        elif isinstance(token, CoercionToken) or (isinstance(token, type) and issubclass(token, CoercionToken)):
-            self.coercers.append(self.get_coercer(token))
-        elif isinstance(token, ValidationToken) or isinstance(token, type) and issubclass(token, ValidationToken):
-            self.validators.append(self.get_validator(token))
-        else:
-            super().apply(token)
+            return
+        coercion_token = _as_instance(token, CoercionToken)
+        if coercion_token is not None:
+            self.coercers.append(self.get_coercer(coercion_token))
+            return
+        validation_token = _as_instance(token, ValidationToken)
+        if validation_token is not None:
+            self.validators.append(self.get_validator(validation_token))
+            return
+        super().apply(token)
 
     @abstractmethod
     def type_check(self, v) -> Optional[TypeMatch]:
+        """
+        Check whether a value matches the storage type
+        :param v: the value to check
+        :return: The `TypeMatch` kind in case of a match, or `None` if there is no type match.
+        """
         pass
 
-    def get_coercer(self, token: Union[CoercionToken, Type[CoercionToken]]) -> Callable[[Any], T]:
-        if isinstance(token, type):
-            return self.get_coercer(token())
+    def get_coercer(self, token: CoercionToken) -> Callable[[Any], T]:
+        """
+        Get a coercion callback from a coercion token.
+        :param token: the token to get the callback from.
+        :return: A coercion callback originating from the token.
+        :raises TypeError: If the token cannot be interpreted for this filler.
+        """
         if callable(token):
             return token(self.origin, self)
         raise TypeError(token)  # pragma: no cover
 
-    def get_validator(self, token: Union[ValidationToken, Type[ValidationToken]]) -> Callable[[T], T]:
-        if isinstance(token, type):
-            return self.get_coercer(token())
+    def get_validator(self, token: ValidationToken) -> Callable[[T], T]:
+        """
+        Get a validation callback from a validation token.
+        :param token: the token to get the callback from.
+        :return: A validation callback originating from the token.
+        :raises TypeError: If the token cannot be interpreted for this filler.
+        """
         if callable(token):
             return token(self.origin, self)
         raise TypeError(token)  # pragma: no cover
 
     def is_hollow(self) -> bool:
         return self.type_checking_style == TypeCheckStyle.hollow
+
+
+class AnnotatedTypeCheckingProcess(TypeCheckingProcess):
+    """
+    The type checking process for `AnnotatedFiller`
+    """
+    def __init__(self, owner: AnnotatedFiller, value):
+        self.owner = owner
+        self.value = value
+
+    def _validation_process(self, arg, success: TypePassKind):
+        return AnnotatedValidationProcess(self.owner, arg, success)
+
+    def __call__(self):
+        if self.owner.type_checking_style == TypeCheckStyle.hollow:
+            return self._validation_process(self.value, TypePassKind.hollow)
+        else:
+            tp = self.owner.type_check(self.value)
+            if tp == TypeMatch.exact:
+                return self._validation_process(self.value, TypePassKind.no_coerce_strict)
+            elif tp == TypeMatch.inexact and self.owner.type_checking_style == TypeCheckStyle.check:
+                return self._validation_process(self.value, TypePassKind.no_coerce)
+            else:
+                # perform coercion
+                if not self.owner.coercers:
+                    raise TypeError(f'failed type checking for value of type {type(self.value)}')
+                for i, coercer in enumerate(self.owner.coercers):
+                    try:
+                        arg = coercer(self.value)
+                        tc = self.owner.type_check(arg)
+                        if tc is None \
+                                or (tc == TypeMatch.inexact and self.owner.type_checking_style != TypeCheckStyle.check):
+                            raise TypeError(f'coercer returned value of wrong type: {type(arg)}')
+                    except Exception:
+                        if i == len(self.owner.coercers) - 1:
+                            raise
+                    else:
+                        break
+                return self._validation_process(arg, TypePassKind.coerce)
+
+
+class AnnotatedValidationProcess(ValidationProcess):
+    """
+    The validation process for `AnnotatedFiller`
+    """
+    def __init__(self, owner: AnnotatedFiller, value, type_checking_success: TypePassKind):
+        self.owner = owner
+        self.value = value
+        self.type_pass = type_checking_success
+
+    def __call__(self):
+        arg = self.value
+        for validator in self.owner.validators:
+            arg = validator(arg)
+
+        return arg

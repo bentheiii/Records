@@ -1,3 +1,7 @@
+"""
+This file provides multiple packports of typing names that may not exist in other versions.
+"""
+
 import sys
 from functools import partial
 from typing import Callable, get_type_hints

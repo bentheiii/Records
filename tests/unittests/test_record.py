@@ -4,7 +4,7 @@ from typing import ClassVar, Dict, Final, Hashable, List, Set
 
 from pytest import fixture, mark, raises, skip
 
-from records import Annotated, DefaultValue, Factory, RecordBase, Tag
+from records import Annotated, Factory, RecordBase, Tag
 from records.select import Select
 
 
@@ -156,7 +156,7 @@ def test_factory(frozen):
 def test_autofactory(frozen):
     class Aggregator(RecordBase, frozen=frozen):
         start: int
-        addends: List[int] = []
+        addends: List[int] = Factory([].copy)
 
     assert Aggregator(3).addends is not Aggregator(3).addends
 
@@ -165,7 +165,7 @@ def test_autofactory(frozen):
 def test_autofactory_copy(frozen):
     class Aggregator(RecordBase, frozen=frozen):
         start: int
-        addends: Set[int] = {1, 2, 3, 4}
+        addends: Set[int] = Factory({1, 2, 3, 4}.copy)
 
     assert Aggregator(3).addends is not Aggregator(3).addends
     assert Aggregator(3).addends == {1, 2, 3, 4}
@@ -177,7 +177,7 @@ def test_autofactory_underride(frozen):
 
     class Aggregator(RecordBase, frozen=frozen):
         start: int
-        addends: Dict[str, int] = DefaultValue(n)
+        addends: Dict[str, int] = n
 
     assert Aggregator(3).addends is Aggregator(3).addends is n
 

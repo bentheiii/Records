@@ -59,6 +59,8 @@ def test_Cyclic():
     a(15, 15)
     a(101, 11)
     a(3, 93)
+    a(100, 10)
+    a(10, 10)
 
 
 def test_equation():
