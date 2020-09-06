@@ -10,6 +10,7 @@ class DumbFiller(Filler):
     """
 
     def __init__(self, origin):
+        super().__init__()
         self.origin = origin
 
     def fill(self, arg):

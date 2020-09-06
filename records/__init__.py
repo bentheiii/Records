@@ -31,7 +31,6 @@ __all__ = [
 ]
 
 # TODO:
-#  * documentation
 #  * i'm pretty sure inheritance ruins the parent
 #  * ensure add_validator and the like fail after binding
 #  * fill on assign? post_init_on assign? invariant?!

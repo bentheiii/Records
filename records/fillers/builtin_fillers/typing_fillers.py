@@ -76,6 +76,7 @@ class UnionFiller(Filler):
     A filler for union types.
     """
     def __init__(self, origin, args):
+        super().__init__()
         self.args = args
         self.sub_types = get_args(origin)
         self.sub_fillers: Sequence[Filler] = ()
@@ -153,6 +154,7 @@ class WrapperFiller(Filler):
     A convenience class for fillers to wrap other fillers, with additional functionality (usually adding validators)
     """
     def __init__(self, origin, args):
+        super().__init__()
         self.inner_filler = get_annotated_filler(origin, args)
 
     def fill(self, arg):

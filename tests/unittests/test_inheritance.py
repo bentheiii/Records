@@ -20,6 +20,9 @@ def test_direct_inheritance():
     assert isinstance(b, B)
     assert isinstance(b, A)
 
+    a = A(a=52)
+    assert a.a == 52
+
 
 def test_override():
     class A(RecordBase):
@@ -196,3 +199,29 @@ def test_hybrid_mixin_init_warns(decl, frozen):
     assert d.call_count == 0
     assert A(a) == a
     assert d.call_count == 0
+
+
+def test_inherit_nondestructive_check():
+    class A(RecordBase):
+        a: Annotated[int, check]
+
+    class B(A):
+        b: Annotated[int, check]
+
+    assert A.a.owner == A
+    assert B.a.owner == A
+
+
+def test_inherit_nondestructive_validator():
+    class A(RecordBase):
+        a: Annotated[int, check]
+
+    with raises(RuntimeError):
+        class B(A):
+            b: Annotated[int, check]
+
+            @classmethod
+            def pre_bind(cls):
+                @cls.a.add_assert_validator
+                def _(v):
+                    return v >= 0

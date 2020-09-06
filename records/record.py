@@ -98,6 +98,7 @@ class RecordBase:
         # initialize inherited fields separately
         parents = [b for b in cls.__bases__ if issubclass(b, RecordBase) and b != RecordBase]
         for parent in parents:
+            field: RecordField
             for k, field in parent._fields.items():
                 if cls._fields.setdefault(k, field) is not field:
                     raise ValueError(f'cannot override inherited field {k}')
@@ -125,6 +126,8 @@ class RecordBase:
         cls.pre_bind()
 
         for field in cls._fields.values():
+            if field.owner is not cls:
+                continue
             field.filler.bind(cls)
 
         cls._parsers = []

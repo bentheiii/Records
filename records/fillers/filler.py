@@ -105,6 +105,9 @@ class Filler(Generic[T]):
     A base class for all fillers who must constrain arbitrary arguments to a (possibly annotated) storage type
     """
 
+    def __init__(self):
+        self.owner = None
+
     @abstractmethod
     def fill(self, arg) -> TypeCheckingProcess[T]:
         """
@@ -120,8 +123,9 @@ class Filler(Generic[T]):
         Bind a filler and associate it with a class. After binding, no new tokens can be applied to the filler.
         :param owner_cls: the owner record class to associate the filler with.
         """
-        # todo prevent re-binding
-        pass
+        if self.owner:
+            raise RuntimeError(f'filler is already bound to {self.owner}')
+        self.owner = owner_cls
 
     @abstractmethod
     def is_hollow(self) -> bool:
@@ -136,8 +140,8 @@ class Filler(Generic[T]):
         Apply a token to a filler.
         :param token: The token provided to the filler through `Annotated`.
         """
-        # todo prevent applying if already binded
-        pass
+        if self.owner:
+            raise RuntimeError('cannot apply tokens to filler after binding')
 
     def __call__(self, arg) -> T:
         """
@@ -176,6 +180,7 @@ class AnnotatedFiller(Filler, Generic[T]):
             If the storage type is not an `Annotated`, `origin` should be the storage type and `args` should be an
             empty tuple.
         """
+        super().__init__()
         self.type_checking_style = TypeCheckStyle.default
         self.origin = origin
         self.args = args
@@ -191,12 +196,14 @@ class AnnotatedFiller(Filler, Generic[T]):
     def bind(self, owner_cls):
         for arg in self.args:
             self.apply(arg)
+        super().bind(owner_cls)
         if self.type_checking_style == TypeCheckStyle.default:
             self.type_checking_style = owner_cls.default_type_check_style()
         if self.type_checking_style == TypeCheckStyle.hollow and self.coercers:
             raise ValueError('cannot have hollow type checking with coercers')
 
     def apply(self, token):
+        super().apply(token)
         if isinstance(token, TypeCheckStyle):
             self.type_checking_style = token
             return
@@ -208,7 +215,6 @@ class AnnotatedFiller(Filler, Generic[T]):
         if validation_token is not None:
             self.validators.append(self.get_validator(validation_token))
             return
-        super().apply(token)
 
     @abstractmethod
     def type_check(self, v) -> Optional[TypeMatch]:
@@ -249,6 +255,7 @@ class AnnotatedTypeCheckingProcess(TypeCheckingProcess):
     """
     The type checking process for `AnnotatedFiller`
     """
+
     def __init__(self, owner: AnnotatedFiller, value):
         self.owner = owner
         self.value = value
@@ -288,6 +295,7 @@ class AnnotatedValidationProcess(ValidationProcess):
     """
     The validation process for `AnnotatedFiller`
     """
+
     def __init__(self, owner: AnnotatedFiller, value, type_checking_success: TypePassKind):
         self.owner = owner
         self.value = value
