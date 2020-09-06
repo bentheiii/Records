@@ -1,6 +1,6 @@
 from records.field import Factory
-from records.fillers.builtin_fillers.std_fillers import (Encoding, Eval, FromInteger, Loose, LooseUnpack,
-                                                         LooseUnpackMap, SingletonFromFalsish, Whole)
+from records.fillers.builtin_fillers.std_fillers import (LiteralEval, Eval, FromInteger, Loose, LooseUnpack,
+                                                         LooseUnpackMap, Falsish, Whole)
 from records.fillers.builtin_validators import Clamp, Cyclic, FullMatch, Truth, Within
 from records.fillers.coercers import CallCoercion, ClassMethodCoercion, ComposeCoercer, MapCoercion
 from records.fillers.filler import TypeCheckStyle
@@ -26,8 +26,8 @@ __all__ = [
     'Tag',
     'SelectableFactory',
 
-    'Eval', 'Loose', 'LooseUnpack', 'LooseUnpackMap', 'Whole', 'FromInteger',
-    'SingletonFromFalsish', 'Encoding'
+    'Eval', 'LiteralEval', 'Loose', 'LooseUnpack', 'LooseUnpackMap', 'Whole', 'FromInteger',
+    'Falsish'
 ]
 
 # TODO:
@@ -37,5 +37,9 @@ __all__ = [
 #  * fill on assign? post_init_on assign? invariant?!
 #  * does selection work on from_instance?
 #  * ordering
+#  * more examples
 #  * add argument to Loose to only accept inputs of certain types
 #  * typevars?
+#  * ways to add validators to sub-parsers
+#  * allow multiple validators to succeed in Unions if they produce the same value
+#  * todo fill trace-back (Union[Annotated[int, Negative], Annotated[bool, Loose]])

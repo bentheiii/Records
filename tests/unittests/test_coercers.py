@@ -6,8 +6,8 @@ from typing import DefaultDict, Deque, Iterable, Mapping, Sequence, Tuple, Union
 
 from pytest import mark, raises
 
-from records import (Annotated, CallCoercion, ClassMethodCoercion, ComposeCoercer, Encoding, Eval, FromInteger, Loose,
-                     LooseUnpack, LooseUnpackMap, MapCoercion, RecordBase, SingletonFromFalsish, TypeCheckStyle, Whole,
+from records import (Annotated, CallCoercion, ClassMethodCoercion, ComposeCoercer, Eval, FromInteger, Loose,
+                     LooseUnpack, LooseUnpackMap, MapCoercion, RecordBase, Falsish, TypeCheckStyle, Whole,
                      check, check_strict)
 from records.fillers.builtin_fillers.std_fillers import ToBytes
 
@@ -139,7 +139,7 @@ def test_from_int():
 
 @mark.parametrize('t,i', [(None, None), (type(None), None), (type(...), ...)])
 def test_singleton(t, i):
-    a = ACls(t, SingletonFromFalsish)
+    a = ACls(t, Falsish)
     a(i, i)
     a(False, i)
     a([], i)
@@ -149,7 +149,7 @@ def test_singleton(t, i):
 
 
 def test_encoding():
-    a = ACls(str, Encoding('ascii'))
+    a = ACls(str, Loose(encoding='ascii'))
     a('abc', 'abc')
     a(b'abc', 'abc')
     with raises(ValueError):

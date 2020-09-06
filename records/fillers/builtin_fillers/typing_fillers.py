@@ -8,19 +8,22 @@ from itertools import chain, islice
 from typing import Any, List, Optional, Sequence, TypeVar, Union
 
 from records.fillers.builtin_fillers.recurse import GetFiller
-from records.fillers.filler import (AnnotatedFiller, Filler, TypeCheckingProcess, TypeCheckStyle, TypeMatch,
-                                    TypePassKind, ValidationProcess)
+from records.fillers.filler import (AnnotatedFiller, Filler, TypeCheckingProcess, TypeMatch, TypePassKind,
+                                    ValidationProcess)
 from records.fillers.get_filler import get_annotated_filler, get_filler
 from records.utils.typing_compatible import get_args, get_origin
 
-no_eq = object()
+
 try:
     from typing import Literal
 except ImportError:  # pragma: no cover
-    Literal = no_eq
+    Literal = object()
 
 
 class UnionTypeCheckingProcess(TypeCheckingProcess):
+    """
+    A type checking process for union fillers, allowing parallel filling
+    """
     def __init__(self, owner: UnionFiller, arg):
         self.owner = owner
         self.arg = arg
@@ -45,6 +48,9 @@ class UnionTypeCheckingProcess(TypeCheckingProcess):
 
 
 class UnionValidationProcess(ValidationProcess):
+    """
+    A validation process for union fillers
+    """
     def __init__(self, owner: UnionFiller, validations: List[ValidationProcess], type_pass: TypePassKind):
         self.owner = owner
         self.validations = validations
@@ -65,9 +71,12 @@ class UnionValidationProcess(ValidationProcess):
         return good_results[0][0]
 
 
-class UnionFiller(AnnotatedFiller):
+class UnionFiller(Filler):
+    """
+    A filler for union types.
+    """
     def __init__(self, origin, args):
-        super().__init__(origin, args)
+        self.args = args
         self.sub_types = get_args(origin)
         self.sub_fillers: Sequence[Filler] = ()
         self.applied = []
@@ -77,8 +86,27 @@ class UnionFiller(AnnotatedFiller):
         self.applied.append(token)
 
     def fill(self, arg):
-        if self.type_checking_style == TypeCheckStyle.hollow:
-            return super().fill(arg)
+        """
+        The filling process for a Union is quite straight forward:
+        * All of the union's inner arguments are parsed as fillers ion their own right, and are given the argument to
+         type check
+            * If any of these fillers succeed in exact type matching, only they are forwarded to the next stage.
+            * Otherwise, if any of these fillers succeed in inexact type matching, only they are forwarded to the next
+             stage.
+            * Otherwise, if any of these fillers succeed in coercion, only they are forwarded to the next stage.
+            * If no type checking succeed, the filling fails.
+        * Then, all the successful sub-fillers are put through validation.
+        * Validation succeeds only if exactly one sub-filler succeeded.
+        """
+        if self.is_hollow():
+            def tc():
+                return v
+
+            def v():
+                return arg
+
+            v.type_pass = TypePassKind.hollow
+            return tc
         return UnionTypeCheckingProcess(self, arg)
 
     def bind(self, owner_cls):
@@ -89,17 +117,15 @@ class UnionFiller(AnnotatedFiller):
                 sf.apply(t)
 
             sf.bind(owner_cls)
-        if self.type_checking_style == TypeCheckStyle.hollow:
-            if not all(sf.is_hollow() for sf in self.sub_fillers):
-                self.type_checking_style = TypeCheckStyle.check
-        else:
-            if all(sf.is_hollow() for sf in self.sub_fillers):
-                raise TypeError('non-hollow unions cannot be used with hollow inner types')
 
-    type_check = type_check_strict = None
+    def is_hollow(self) -> bool:
+        return all(sf.is_hollow() for sf in self.sub_fillers)
 
 
 class LiteralFiller(AnnotatedFiller):
+    """
+    A filler for literal types.
+    """
     def __init__(self, origin, args):
         super().__init__(origin, args)
         self.possible_values = defaultdict(set)
@@ -123,6 +149,9 @@ class LiteralFiller(AnnotatedFiller):
 
 
 class WrapperFiller(Filler):
+    """
+    A convenience class for fillers to wrap other fillers, with additional functionality (usually adding validators)
+    """
     def __init__(self, origin, args):
         self.inner_filler = get_annotated_filler(origin, args)
 
@@ -141,6 +170,9 @@ class WrapperFiller(Filler):
 
 
 class TypeFiller(WrapperFiller):
+    """
+    A filler for a parameterized typing.Type
+    """
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.base_type = get_args(origin)[0]
@@ -157,6 +189,9 @@ class TypeFiller(WrapperFiller):
 
 
 class TupleFiller(WrapperFiller):
+    """
+    A filler for a parameterized typing.Tuple
+    """
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_args = get_args(origin)
@@ -220,6 +255,14 @@ class TupleFiller(WrapperFiller):
 
 
 def _split_at(seq, ignore_ind):
+    """
+    A utility function to split it in index, ignoring the element at the selected index
+    :param seq: the sequence or iterable to split
+    :param ignore_ind: the index to ignore
+    :return: two iterables, one for `seq`'s elements up to `ignore_ind`, the second for all elements after.
+    .. note::
+        When used, the first iterable must be consumed entirely prior to the second one being consumed at all.
+    """
     try:
         return seq[:ignore_ind], seq[ignore_ind + 1:]
     except TypeError:
@@ -227,12 +270,21 @@ def _split_at(seq, ignore_ind):
         return islice(i, ignore_ind), islice(i, 1, None)
 
 
-class GenericIterableFiller1(WrapperFiller):
+class GenericIterableFiller(WrapperFiller):
+    """
+    A filler for generic variants of concrete iterable classes.
+    """
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_type = get_args(origin)[0]
 
     def reconstruct(self, elements, initial):
+        """
+        reconstruct a filled instance that passed type checking, after its elements have mutated
+        :param elements: the new elements of the iterable
+        :param initial: The original filled argument. Must not be mutated.
+        :return: A new instance of `initial`'s type, with `elements` as its elements.
+        """
         return type(initial)(elements)
 
     def bind(self, owner_cls):
@@ -262,17 +314,29 @@ class GenericIterableFiller1(WrapperFiller):
                 return v
 
 
-class GenericDequeFiller(GenericIterableFiller1):
+class GenericDequeFiller(GenericIterableFiller):
+    """
+    A filler for generic deques
+    """
     def reconstruct(self, elements, initial: deque):
         return type(initial)(elements, initial.maxlen)
 
 
 class GenericMappingFiller(WrapperFiller):
+    """
+    A filler for generic variants of concrete mappings
+    """
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.key_type, self.value_type = get_args(origin)
 
     def reconstruct(self, tuples, initial):
+        """
+        reconstruct a filled instance that passed type checking, after its elements have mutated
+        :param tuples: the new key-value tuples of the mapping
+        :param initial: The original filled argument. Must not be mutated.
+        :return: A new instance of `initial`'s type, with `tuples` as its tuples.
+        """
         return type(initial)(tuples)
 
     def bind(self, owner_cls):
@@ -304,22 +368,29 @@ class GenericMappingFiller(WrapperFiller):
 
 
 class DefaultDictFiller(GenericMappingFiller):
+    """
+    A filler for generic defaultdicts
+    """
     def reconstruct(self, tuples, initial: defaultdict):
         return type(initial)(initial.default_factory, tuples)
 
 
 class GenericFillerN(WrapperFiller):
+    """
+    A filler for generic non-concrete classes or classes that otherwise can't have their parameters type-checked.
+    """
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
-        self.inner_types = get_args(origin)[0]
+        self.inner_types = get_args(origin)
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
 
-        f = get_filler(self.inner_types)
-        f.bind(owner_cls)
-        if not f.is_hollow():
-            raise TypeError('A non-specialized filler cannot have non-hollow inner types')
+        fillers = [get_filler(it) for it in self.inner_types]
+        for f in fillers:
+            f.bind(owner_cls)
+            if not f.is_hollow():
+                raise TypeError('A non-specialized filler cannot have non-hollow inner types')
 
 
 typing_checkers = []
@@ -330,9 +401,9 @@ genric_origin_map = {
 
     deque: GenericDequeFiller, defaultdict: DefaultDictFiller,
 
-    abstract_collections.Sequence: GenericIterableFiller1, abstract_collections.MutableSequence: GenericIterableFiller1,
-    abstract_collections.Set: GenericIterableFiller1, abstract_collections.MutableSet: GenericIterableFiller1,
-    list: GenericIterableFiller1, set: GenericIterableFiller1, frozenset: GenericIterableFiller1,
+    abstract_collections.Sequence: GenericIterableFiller, abstract_collections.MutableSequence: GenericIterableFiller,
+    abstract_collections.Set: GenericIterableFiller, abstract_collections.MutableSet: GenericIterableFiller,
+    list: GenericIterableFiller, set: GenericIterableFiller, frozenset: GenericIterableFiller,
 
     abstract_collections.Iterable: GenericFillerN, abstract_collections.Iterator: GenericFillerN,
     abstract_collections.Reversible: GenericFillerN, abstract_collections.Collection: GenericFillerN,
@@ -356,10 +427,10 @@ def has_args(v):
 def _typing(stored_type):
     supertype = getattr(stored_type, '__supertype__', None)  # handle newtype
     if supertype:
-        raise GetFiller(supertype)
+        return GetFiller(supertype)
 
     if stored_type is Any:
-        raise GetFiller(object)
+        return GetFiller(object)
 
     origin_cls = get_origin(stored_type)
     if origin_cls == Union:
@@ -369,12 +440,12 @@ def _typing(stored_type):
     if origin_cls == type:
         if has_args(stored_type):
             return TypeFiller
-        raise GetFiller(type)
+        return GetFiller(type)
     if origin_cls == CallableBase:
-        raise GetFiller(callable)
+        return GetFiller(callable)
     if has_args(stored_type):
         t = genric_origin_map.get(origin_cls)
         if t:
             return t
     elif origin_cls:
-        raise GetFiller(origin_cls)
+        return GetFiller(origin_cls)

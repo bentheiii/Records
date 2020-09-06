@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from ast import literal_eval
 from functools import partial
 from inspect import isabstract
 from math import isclose
-from numbers import Complex, Rational, Real
+from numbers import Complex, Rational, Real, Integral
 from typing import Any, Callable, Dict, Generic, Type, TypeVar
 
 from records.fillers.builtin_fillers.recurse import GetFiller
@@ -13,6 +14,12 @@ T = TypeVar('T')
 
 
 class Eval(GlobalCoercionToken):
+    """
+    A coercion token to evaluate a string input as a python expression using `eval`
+    .. warning::
+        evaluating arbitrary strings is always risky!
+    """
+
     def __init__(self, *args, **kwargs):
         if args and args[0] is ...:
             self.add_bound = True
@@ -42,30 +49,55 @@ class Eval(GlobalCoercionToken):
         return ret
 
 
-class OriginDependant(GlobalCoercionToken, ABC):
-    @abstractmethod
-    def func(self, origin, v):
-        pass
+class LiteralEval(GlobalCoercionToken):
+    """
+    A coercion token to evaluate string inputs as literals continuously
+    """
 
     def __call__(self, origin, filler):
-        return partial(self.func, origin)
+        if origin not in {int, str, float, complex, set, tuple, dict, list, bool}:
+            raise TypeError(f'cannot use literal evaluation coercer with non-literal type {origin}')
+
+        def ret(v):
+            while isinstance(v, str):
+                v = literal_eval(v)
+            return v
+
+        return ret
 
 
-class ArgsOriginDependant(OriginDependant, ABC):
+class OriginDependant(GlobalCoercionToken, ABC):
+    """
+    A convenience coercion token superclass to pass coercion directly to a token method
+    """
+
     def __init__(self, *args, **kwargs):
+        """
+        :param args: arguments accessible to the callback
+        :param kwargs: keywords accessible to the callback
+        """
         self.args = args
         self.kwargs = kwargs
 
     @staticmethod
     @abstractmethod
-    def func_args(origin, v, args, kwargs):
+    def func_args(origin, v):
+        """
+        The coercion callback to apply on an argument, given an origin.
+        :param origin: The target storage type.
+        :param v: The input argument to the coercer.
+        :return: The coerced value
+        """
         pass
 
-    def func(self, origin, v):
-        return self.func_args(origin, v, self.args, self.kwargs)
+    def __call__(self, origin, filler):
+        return partial(self.func_args, origin)
 
 
-class LooseMixin(ArgsOriginDependant, ABC):
+class LooseMixin(OriginDependant, ABC):
+    """
+    A superclass for "loose" coercion tokens that call the class constructor, forbidding binding to abstract classes
+    """
     def __call__(self, origin, filler):
         if (not isinstance(origin, type)) or isabstract(origin):
             raise TypeError(f'cannot use loose coercer with non-concrete type {origin}')
@@ -73,24 +105,33 @@ class LooseMixin(ArgsOriginDependant, ABC):
 
 
 class Loose(LooseMixin):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
-        return origin(v, *args, **kwargs)
+    """
+    A coercion token to call the class constructor with the input as an argument
+    """
+    def func_args(self, origin, v):
+        return origin(v, *self.args, **self.kwargs)
 
 
 class LooseUnpack(LooseMixin):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
-        return origin(*v, *args, **kwargs)
+    """
+    A coercion token to call the class constructor with the input as an unpacked iterable
+    """
+    def func_args(self, origin, v):
+        return origin(*v, *self.args, **self.kwargs)
 
 
 class LooseUnpackMap(LooseMixin):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
-        return origin(*args, **v, **kwargs)
+    """
+    A coercion token to call the class constructor with the input as an unpacked mapping
+    """
+    def func_args(self, origin, v):
+        return origin(*self.args, **v, **self.kwargs)
 
 
 class SimpleFiller(AnnotatedFiller[T], Generic[T]):
+    """
+    A concrete filler class that uses instance checking to check types
+    """
     def type_check(self, v):
         if type(v) == self.origin:
             return TypeMatch.exact
@@ -103,38 +144,52 @@ class SimpleFiller(AnnotatedFiller[T], Generic[T]):
             raise TypeError(f'cannot create strict checker for abstract class {self.origin}')
 
 
-class Whole(ArgsOriginDependant):
-    @classmethod
-    def func_args(cls, origin, v, args, kwargs):
+class Whole(OriginDependant):
+    """
+    A coercion token to attempt to convert a whole Number to an Integer type
+    """
+    def func_args(self, origin, v):
         if isinstance(v, Rational):
             if v.denominator == 1:
-                return origin(v.numerator, *args, **kwargs)
+                return origin(v.numerator, *self.args, **self.kwargs)
         elif isinstance(v, Real):
             mod = v % 1
             if isclose(mod, 0) or isclose(mod, 1):
-                return origin(v, *args, **kwargs)
+                return origin(v, *self.args, **self.kwargs)
         elif isinstance(v, Complex):
             if v.imag == 0:
-                return cls.func_args(origin, v.real, args, kwargs)
+                return self.func_args(origin, v.real)
         raise TypeError
 
 
-class ToBytes(ArgsOriginDependant):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
-        if not isinstance(v, int):
+class ToBytes(OriginDependant):
+    """
+    A coercion token to convert a n Integer value to a bytestring
+    """
+    def func_args(self, origin, v):
+        # In theory we aught to restrict this token to just ints, but if another Integer subclass wants to use this
+        # coercer we aren't gonna stop them
+        if not isinstance(v, Integral):
             raise type
-        if not args and ('length' not in kwargs):
-            signed = kwargs.get('signed', False)
+        if not self.args and ('length' not in self.kwargs):
+            signed = self.kwargs.get('signed', False)
             args = ((v.bit_length() + 7 + signed) // 8,)
-        return origin(v.to_bytes(*args, **kwargs))
+        else:
+            args = self.args
+        return origin(v.to_bytes(*args, **self.kwargs))
 
 
 class FromInteger(CoercionToken):
+    """
+    A coercion token to convert an integer to a boolean, failing if the value is not 0 or 1.
+    """
     pass
 
 
 class BoolFiller(SimpleFiller[bool]):
+    """
+    A specialized boolean filler to handle `FromInteger`
+    """
     @staticmethod
     def _bool_from_int(v):
         if v == 0:
@@ -149,32 +204,37 @@ class BoolFiller(SimpleFiller[bool]):
         return super().get_coercer(token)
 
 
-class SingletonFromFalsish(ArgsOriginDependant):
-    @staticmethod
-    def func_args(origin, v, args, kwargs):
+class Falsish(OriginDependant):
+    """
+    A coercion token to construct an instance of the target type ignoring the input, only if the argument is falsish.
+     Useful to create empty objects from None inputs.
+    """
+    def func_args(self, origin, v):
         if not v:
-            return origin(*args, **kwargs)
+            return origin(*self.args, **self.kwargs)
         raise TypeError
 
 
 class NoneFiller(SimpleFiller[None]):
+    """
+    A specialized filler for None
+    """
     def type_check(self, v) -> bool:
         return (v is None) and TypeMatch.exact
 
 
 class EllipsisFiller(SimpleFiller[type(...)]):
+    """
+    A specialized filler for Ellipsis
+    """
     def type_check(self, v) -> bool:
         return (v is ...) and TypeMatch.exact
 
-    type_check_strict = type_check
-
-
-class Encoding(Loose):
-    def __init__(self, encoding, **kwargs):
-        super().__init__(encoding=encoding, **kwargs)
-
 
 class CallableFiller(AnnotatedFiller[Callable]):
+    """
+    A specialized filler for callable objects
+    """
     def type_check(self, v):
         return callable(v) and TypeMatch.exact
 
@@ -198,4 +258,4 @@ def callable_checker(stored_type):
 @std_filler_checkers.append
 def none_checker(stored_type):
     if stored_type is None:
-        raise GetFiller(type(None))
+        return GetFiller(type(None))

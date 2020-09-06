@@ -1,14 +1,8 @@
 .DEFAULT_GOAL := all
-isort = python -m isort -l 120 records tests
-
-.PHONY: format
-format:
-	$(isort)
 
 .PHONY: lint
 lint:
 	python -m flake8 records/ tests/
-	$(isort) --check-only
 
 .PHONY: test
 test:

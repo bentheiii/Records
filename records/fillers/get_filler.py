@@ -63,11 +63,10 @@ def get_annotated_filler(origin, args: tuple):
         return blt(origin, args)
     for checker in builtin_filler_checkers:
         # builtin functions to create a filler class
-        try:
-            ret = checker(origin)
-        except GetFiller as e:
-            return get_annotated_filler(e.args[0], args)
-        if ret:
+        ret = checker(origin)
+        if isinstance(ret, GetFiller):
+            return get_annotated_filler(ret.new_origin, args)
+        elif ret:
             return ret(origin, args)
     if isinstance(origin, type):
         # run through all classes in the mapping checking for subtypes
