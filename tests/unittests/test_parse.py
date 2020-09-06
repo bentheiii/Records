@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
+from types import SimpleNamespace
 from typing import Optional, Sequence
 
 from pytest import fixture, mark, raises
@@ -140,3 +141,9 @@ def test_custom_parser(frozen):
             raise TypeError
 
     assert Point((1, 2)) == Point(x=1, y=2)
+
+
+def test_select_frominstance(Point):
+    mp = SimpleNamespace(x=1, Y=2)
+    p = Point.from_instance.select(keys_to_rename=[('Y', 'y')])(mp)
+    assert p == Point(x=1, y=2)

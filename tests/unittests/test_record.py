@@ -283,6 +283,13 @@ def test_from_json(Point):
     assert Point.from_json.select(keys_to_remove='z')(s) == Point(x=1, y=2)
 
 
+def test_bad_cmp(Point):
+    p1 = Point(x=1, y=2)
+    p2 = Point(x=2, y=1)
+    with raises(TypeError):
+        assert p1 >= p2
+
+
 def test_dumb_hint():
     class A(RecordBase):
         x: 12

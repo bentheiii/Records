@@ -3,13 +3,14 @@ from __future__ import annotations
 from collections import ChainMap
 from copy import deepcopy
 from inspect import getattr_static
-from typing import AbstractSet, Any, Callable, ClassVar, Container, Dict, List, Mapping, Optional, TypeVar, Union
+from typing import AbstractSet, Any, Callable, ClassVar, Container, Dict, List, Mapping, Optional, TypeVar, Union, \
+    NamedTuple
 from warnings import warn
 
 import records.extras as extras
 from records.field import NO_DEFAULT, SKIP_FIELD, FieldDict, RecordField
 from records.fillers.filler import TypeCheckStyle
-from records.select import Exporter, NoArgExporter, SelectableFactory, SelectableShortcutFactory
+from records.select import Exporter, NoArgExporter, SelectableFactory, SpecializedShortcutFactory, Select
 from records.tags import Tag
 from records.utils.typing_compatible import get_type_hints
 
@@ -19,6 +20,8 @@ except ImportError:  # pragma: no cover
     Final = object()
 
 NO_ARG = object()
+
+exclude_from_ordering = Tag(object())
 
 
 def parser(func: Callable):
@@ -60,8 +63,10 @@ class RecordBase:
     _unary_parse: ClassVar[bool]
     # a mutable list of parsers
     _parsers: ClassVar[List[Callable]]
+    # whether the class is ordered
+    _ordered: ClassVar[bool]
 
-    def __init_subclass__(cls, *, frozen: bool = False, unary_parse: Optional[bool] = None,
+    def __init_subclass__(cls, *, frozen: bool = False, unary_parse: Optional[bool] = None, ordered=False,
                           default_type_check=TypeCheckStyle.hollow, **kwargs):
         """
         sets up the record subclass
@@ -78,6 +83,7 @@ class RecordBase:
                 warn(f'in class {cls}: must not override {attr} (method will be overridden)')
 
         cls._frozen = frozen
+        cls._ordered = ordered
         cls._default_type_check_style = default_type_check
         cls._fields = FieldDict()
         # in bodyless classes, __annotations__ refers to parent
@@ -97,11 +103,15 @@ class RecordBase:
 
         # initialize inherited fields separately
         parents = [b for b in cls.__bases__ if issubclass(b, RecordBase) and b != RecordBase]
+        parent_fields = {}
         for parent in parents:
             field: RecordField
             for k, field in parent._fields.items():
-                if cls._fields.setdefault(k, field) is not field:
+                if k in cls._fields or k in parent_fields:
                     raise ValueError(f'cannot override inherited field {k}')
+                parent_fields[k] = field
+        if parent_fields:
+            cls._fields = {**parent_fields, **cls._fields}
 
         if any(b for b in cls.__bases__ if b.__init__ not in (RecordBase.__init__, object.__init__)):
             warn(f'class {cls} has parents that implement __init__, the initializer will not be called!')
@@ -249,15 +259,29 @@ class RecordBase:
     def __eq__(self, other):
         if type(self) != type(other):
             return False
+        if type(self).is_frozen() and hash(self) != hash(other):
+            return False
         for name in self._fields:
             if getattr(self, name) != getattr(other, name):
                 return False
         return True
 
+    class _MockField(NamedTuple):
+        """
+        A "virtual" field used when extracting data, to mimic an actual field
+        """
+        name: str
+        has_default: bool = False
+        tags = frozenset()
+
+        def is_default(self, v):
+            return False
+
     @classmethod
     def _to_dict(cls, obj, include_defaults=False, sort=None,
                  blacklist_tags: Union[Container[Tag], Tag] = frozenset(),
-                 whitelist_keys: Union[Container[str], str] = frozenset()) -> Dict[str, Any]:
+                 whitelist_keys: Union[Container[str], str] = frozenset(),
+                 _rev_select: Select = Select.empty) -> Dict[str, Any]:
         """
         Create a dict representing the values of the class's fields for an arbitrary objects
         :param obj: the object to get attributes from
@@ -268,6 +292,8 @@ class RecordBase:
         :param blacklist_tags: A ``Tag`` or set of ``Tag``s to ignore all fields with the ``Tag``.
         :param whitelist_keys: A field name or set of field names to include regardless of ``blacklist`` and
          ``include_defaults``.
+        :param _rev_select: A private `Select`, intended to be applied over the result, the function will attempt to
+         extract the appropriate keys to fit the select
         :return: A ``dict`` object with key names as specified by ``include_defaults``, ``sort``, ``blacklist_tags``,
          ``whitelist_keys``, and with values according to ``obj``'s attributes.
         :raises AttributeError: if ``obj`` lacks an attribute that has not been blacklisted
@@ -285,11 +311,30 @@ class RecordBase:
             return f.name in whitelist_keys or not (f.tags & blacklist_tags)
 
         def export_value(f: RecordField, v):
-            return f.name in whitelist_keys or include_defaults or not f.is_default(v)
+            return f.name in whitelist_keys \
+                   or include_defaults or not (f.has_default and f.is_default(v))
+
+        if _rev_select:
+            extraction_dict = dict(cls._fields)
+            for to_remove in _rev_select.keys_to_remove:
+                if to_remove in cls._fields:
+                    continue
+                extraction_dict[to_remove] = cls._MockField(name=to_remove)
+            for old, new in _rev_select.keys_to_rename:
+                extraction_dict.pop(new, None)
+                extraction_dict[old] = cls._MockField(name=old)
+            for old, new in _rev_select.keys_to_maybe_rename:
+                extraction_dict.pop(new, None)
+                extraction_dict[old] = cls._MockField(name=old, has_default=True, )
+            for key, _ in _rev_select.keys_to_add:
+                extraction_dict.pop(key, _)
+            fields_to_extract = extraction_dict.values()
+        else:
+            fields_to_extract = cls._fields.values()
 
         def tuples():
             # inner function to lazily get the key-value tuples
-            for field in cls._fields.values():
+            for field in fields_to_extract:
                 if not export_field(field):
                     continue
 
@@ -363,13 +408,14 @@ class RecordBase:
         """
         return ChainMap(*maps, dict(**kwargs))
 
-    @SelectableShortcutFactory
+    @SpecializedShortcutFactory
     @classmethod
-    def from_instance(cls, v, *maps: Mapping[str, Any], **kwargs):
+    def from_instance(cls, v, *maps: Mapping[str, Any], _select=Select.empty, **kwargs):
         """
         Convert an object to a Record instance by attributes.
         :param v: An object to get attributes from.
         :param maps: Mappings to combine into field values.
+        :param _select: a private `Select` to be used when extracting object attributes.
         :param kwargs: Additional field name in the instance.
         :return: An instance of ``cls`` with arguments as described by the input namespace and mappings.
         .. note::
@@ -380,7 +426,7 @@ class RecordBase:
         .. note::
             This class method is a registered parser that will be attempted when calling ``cls.parse``.
         """
-        d = cls._to_dict(v)
+        d = cls._to_dict(v, _rev_select=_select)
         d.update(*maps, **kwargs)
         return d
 
@@ -530,3 +576,40 @@ class RecordBase:
         d = self.to_dict()
         d = deepcopy(d, memo)
         return self.from_mapping(d)
+
+    def __ordering_key(self):
+        f: RecordField
+        ret = []
+        for k, f in type(self)._fields.items():
+            if exclude_from_ordering in f.tags:
+                continue
+            ret.append(getattr(self, k))
+        return ret
+
+    def check_comparable(self, other):
+        if not type(self)._ordered:
+            raise TypeError(f'cannot compare with non-ordered type {type(self).__qualname__}')
+
+    def __lt__(self, other):
+        self.check_comparable(other)
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.__ordering_key() < other.__ordering_key()
+
+    def __le__(self, other):
+        self.check_comparable(other)
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.__ordering_key() <= other.__ordering_key()
+
+    def __gt__(self, other):
+        self.check_comparable(other)
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.__ordering_key() > other.__ordering_key()
+
+    def __ge__(self, other):
+        self.check_comparable(other)
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.__ordering_key() >= other.__ordering_key()

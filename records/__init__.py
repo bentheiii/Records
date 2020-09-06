@@ -5,7 +5,7 @@ from records.fillers.builtin_validators import Clamp, Cyclic, FullMatch, Truth, 
 from records.fillers.coercers import CallCoercion, ClassMethodCoercion, ComposeCoercer, MapCoercion
 from records.fillers.filler import TypeCheckStyle
 from records.fillers.validators import AssertCallValidation, AssertValidation, CallValidation, ValidationToken
-from records.record import RecordBase, parser
+from records.record import RecordBase, parser, exclude_from_ordering
 from records.select import SelectableFactory
 from records.tags import Tag
 from records.utils.typing_compatible import Annotated
@@ -15,7 +15,7 @@ check_strict = TypeCheckStyle.check_strict
 hollow = TypeCheckStyle.hollow
 
 __all__ = [
-    'RecordBase', 'Annotated', 'Factory', 'parser',
+    'RecordBase', 'Annotated', 'Factory', 'parser', 'exclude_from_ordering',
 
     'TypeCheckStyle', 'check', 'check_strict', 'hollow',
 
@@ -31,11 +31,7 @@ __all__ = [
 ]
 
 # TODO:
-#  * i'm pretty sure inheritance ruins the parent
-#  * ensure add_validator and the like fail after binding
 #  * fill on assign? post_init_on assign? invariant?!
-#  * does selection work on from_instance?
-#  * ordering
 #  * more examples
 #  * add argument to Loose to only accept inputs of certain types
 #  * typevars?

@@ -203,6 +203,13 @@ class SelectableFactory(Generic[T]):
             return type(self)(self.descriptor, self.owner_cls, self.select_.merge(*selects, **kwargs))
 
 
+class SpecializedSelectableFactory(SelectableFactory):
+    def run(self, cls: Type, args: Iterable, kwargs: Mapping[str, Any], select: Select):
+        mapping = self.func(cls, *args, _select=select, **kwargs)
+        mapping = select(mapping)
+        return cls(**mapping)
+
+
 class SelectableShortcutFactory(SelectableFactory):
     """
     A selectable factory with a shortcut function, that will be called if the ``select`` is false.
@@ -234,6 +241,10 @@ class SelectableShortcutFactory(SelectableFactory):
             if ret is not NotImplemented:
                 return ret
         return super().run(cls, args, kwargs, select)
+
+
+class SpecializedShortcutFactory(SelectableShortcutFactory, SpecializedSelectableFactory):
+    pass
 
 
 class Exporter(Generic[T]):
