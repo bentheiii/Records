@@ -1,4 +1,7 @@
-from math import sqrt# Records
+![Test records](https://github.com/bentheiii/Records/workflows/Test%20records/badge.svg?branch=master)
+[![codecov](https://codecov.io/gh/bentheiii/Records/branch/master/graph/badge.svg)](https://codecov.io/gh/bentheiii/Records)
+
+# Records
 Records is a python library that makes powerful structure classes easy.
 
 ## Simplest Example
