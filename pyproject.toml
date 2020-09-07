@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "recordclasses"
-version = "0.0.1"
+version = "0.1.0.dev"
 description = "Record Classes"
 authors = ["Ben Avrahami"]
 license = "MIT"

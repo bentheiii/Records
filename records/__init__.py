@@ -33,7 +33,6 @@ __all__ = [
 # TODO:
 #  * fill on assign? post_init_on assign? invariant?!
 #  * more examples
-#  * add argument to Loose to only accept inputs of certain types
 #  * typevars?
 #  * ways to add validators to sub-parsers
 #  * allow multiple validators to succeed in Unions if they produce the same value

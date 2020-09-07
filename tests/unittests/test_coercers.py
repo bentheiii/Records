@@ -2,7 +2,7 @@ from collections import defaultdict, deque, namedtuple
 from enum import Enum
 from fractions import Fraction
 from re import Pattern, compile
-from typing import DefaultDict, Deque, Iterable, Mapping, Sequence, Tuple, Union
+from typing import DefaultDict, Deque, Iterable, Mapping, Sequence, Tuple, Union, List
 
 from pytest import mark, raises
 
@@ -387,3 +387,51 @@ def test_literal_eval():
 def test_bad_literal_eval():
     with raises(TypeError):
         ACls(Iterable, LiteralEval)
+
+
+def test_sub_filler_tuple():
+    class A(RecordBase):
+        x: Annotated[Tuple[Annotated[int, check], Annotated[float, check]], check]
+
+        @classmethod
+        def pre_bind(cls):
+            @cls.x.add_coercer(sub_key=1)
+            def _(v):
+                if not isinstance(v, str):
+                    raise TypeError
+                n, d = v.split("/", maxsplit=2)
+                return int(n.strip()) / int(d.strip())
+
+    assert A((5, "1/2")).x == (5, 0.5)
+
+
+def test_sub_filler_list():
+    class A(RecordBase):
+        x: Annotated[List[Annotated[float, check]], check]
+
+        @classmethod
+        def pre_bind(cls):
+            @cls.x.add_coercer(sub_key=0)
+            def _(v):
+                if isinstance(v, complex):
+                    return abs(v)
+                raise TypeError
+
+    assert A(
+        [0.5, 1.0, 1.5 + 2j]
+    ).x == [0.5, 1.0, 2.5]
+
+
+def test_sub_filler_union():
+    class A(RecordBase, default_type_check=check):
+        x: Union[float, str]
+
+        @classmethod
+        def pre_bind(cls):
+            @cls.x.add_coercer(sub_key=1)
+            def _(v):
+                if isinstance(v, bytes):
+                    return str(v, encoding='ascii')
+                raise TypeError
+
+    assert A(b'hello there') == A('hello there')

@@ -15,6 +15,7 @@ def decorator_kw_method(func):
         >>> def bar3():
         >>>     ...
     """
+
     @wraps(func)
     def ret(self, f=None, **kwargs):
         if f is None:

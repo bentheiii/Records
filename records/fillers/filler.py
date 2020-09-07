@@ -84,6 +84,17 @@ class Filler(Generic[T]):
     def __init__(self):
         self.owner = None
 
+    def sub_filler(self, key):
+        """
+        get a sub-filler of `self`
+        :param key: the key to identify the filler by
+        :return: the sub-filler of `self` corresponding to `key`
+        :raises LookupError: if no sub-filler corresponding to `key` is found
+        """
+        if key is None:
+            return self
+        raise LookupError(f'filler {self} has no sub-filler of key {key}')
+
     @abstractmethod
     def fill(self, arg) -> FillingSuccess[T]:
         """

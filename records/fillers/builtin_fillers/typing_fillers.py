@@ -27,7 +27,7 @@ class UnionFiller(Filler):
         super().__init__()
         self.args = args
         self.sub_types = get_args(origin)
-        self.sub_fillers: Sequence[Filler] = ()
+        self.sub_fillers: Sequence[Filler] = tuple(get_filler(a) for a in self.sub_types)
         self.applied = []
 
     def apply(self, token):
@@ -70,7 +70,6 @@ class UnionFiller(Filler):
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
-        self.sub_fillers = [get_filler(a) for a in self.sub_types]
         for sf in self.sub_fillers:
             for t in chain(self.args, self.applied):
                 sf.apply(t)
@@ -79,6 +78,11 @@ class UnionFiller(Filler):
 
     def is_hollow(self) -> bool:
         return all(sf.is_hollow() for sf in self.sub_fillers)
+
+    def sub_filler(self, key):
+        if isinstance(key, int):
+            return self.sub_fillers[key]
+        return super().sub_filler(key)
 
 
 class LiteralFiller(AnnotatedFiller):
@@ -159,12 +163,16 @@ class TupleFiller(WrapperFiller):
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_args = get_args(origin)
+        if len(self.inner_args) == 2 and self.inner_args[-1] is ...:
+            self.sub_fillers = (get_filler(self.inner_args[0]),)
+        else:
+            self.sub_fillers = tuple(get_filler(t) for t in self.inner_args)
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
 
         if len(self.inner_args) == 2 and self.inner_args[-1] is ...:
-            inner_filler = get_filler(self.inner_args[0])
+            inner_filler = self.sub_fillers[0]
             inner_filler.bind(owner_cls)
             if not inner_filler.is_hollow():
                 if self.is_hollow():
@@ -189,21 +197,20 @@ class TupleFiller(WrapperFiller):
             if not self.is_hollow():
                 @self.inner_filler.validators.append
                 def _(v):
-                    if len(v) != len(inner_fillers):
-                        raise ValueError(f'must be a {len(inner_fillers)}-tuple')
+                    if len(v) != len(self.sub_fillers):
+                        raise ValueError(f'must be a {len(self.sub_fillers)}-tuple')
                     return v
 
-            inner_fillers = tuple(get_filler(t) for t in self.inner_args)
-            for f in inner_fillers:
+            for f in self.sub_fillers:
                 f.bind(owner_cls)
-            if not all(inner_filler.is_hollow() for inner_filler in inner_fillers):
+            if not all(inner_filler.is_hollow() for inner_filler in self.sub_fillers):
                 if self.is_hollow():
                     raise TypeError('cannot use non-hollow inner fillers in a hollow filler')
 
                 @self.inner_filler.validators.append
                 def _(v):
                     hollow_passes = 0  # the number of elements that filled identically
-                    for element, filler in zip(v, inner_fillers):
+                    for element, filler in zip(v, self.sub_fillers):
                         filled = filler(element)
                         if filled is element:
                             hollow_passes += 1
@@ -212,10 +219,15 @@ class TupleFiller(WrapperFiller):
                                 v[:hollow_passes],
                                 [filled],
                                 (if_(a) for (a, if_) in zip(v[hollow_passes + 1:],
-                                                            inner_fillers[hollow_passes + 1:]))
+                                                            self.sub_fillers[hollow_passes + 1:]))
                             )
                             return type(v)(all_elements)
                     return v
+
+    def sub_filler(self, key):
+        if isinstance(key, int):
+            return self.sub_fillers[key]
+        return super().sub_filler(key)
 
 
 def _split_at(seq, ignore_ind):
@@ -242,6 +254,7 @@ class GenericIterableFiller(WrapperFiller):
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_type = get_args(origin)[0]
+        self.element_filler = get_filler(self.inner_type)
 
     def reconstruct(self, elements, initial):
         """
@@ -255,9 +268,8 @@ class GenericIterableFiller(WrapperFiller):
     def bind(self, owner_cls):
         super().bind(owner_cls)
 
-        inner_filler = get_filler(self.inner_type)
-        inner_filler.bind(owner_cls)
-        if not inner_filler.is_hollow():
+        self.element_filler.bind(owner_cls)
+        if not self.element_filler.is_hollow():
             if self.is_hollow():
                 raise TypeError('cannot use non-hollow inner fillers in a hollow filler')
 
@@ -265,7 +277,7 @@ class GenericIterableFiller(WrapperFiller):
             def inner_validator(v):
                 hollow_passes = 0  # the number of elements that filled identically
                 for element in v:
-                    filled = inner_filler(element)
+                    filled = self.element_filler(element)
                     if filled is element:
                         hollow_passes += 1
                     else:
@@ -273,10 +285,15 @@ class GenericIterableFiller(WrapperFiller):
                         all_elements = chain(
                             pre,
                             [filled],
-                            (inner_filler(a) for a in post)
+                            (self.element_filler(a) for a in post)
                         )
                         return self.reconstruct(all_elements, v)
                 return v
+
+    def sub_filler(self, key):
+        if key == 0:
+            return self.element_filler
+        return super().sub_filler(key)
 
 
 class GenericDequeFiller(GenericIterableFiller):
@@ -296,6 +313,8 @@ class GenericMappingFiller(WrapperFiller):
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.key_type, self.value_type = get_args(origin)
+        self.key_filler = get_filler(self.key_type)
+        self.value_filler = get_filler(self.value_type)
 
     def reconstruct(self, tuples, initial):
         """
@@ -308,12 +327,9 @@ class GenericMappingFiller(WrapperFiller):
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
-
-        key_filler = get_filler(self.key_type)
-        value_filler = get_filler(self.value_type)
-        key_filler.bind(owner_cls)
-        value_filler.bind(owner_cls)
-        if not key_filler.is_hollow() or not value_filler.is_hollow():
+        self.key_filler.bind(owner_cls)
+        self.value_filler.bind(owner_cls)
+        if not self.key_filler.is_hollow() or not self.value_filler.is_hollow():
             if self.is_hollow():
                 raise TypeError('cannot use non-hollow inner fillers in a hollow filler')
 
@@ -322,7 +338,7 @@ class GenericMappingFiller(WrapperFiller):
                 # there are no shortcuts here since maps can't be slices
                 # (and thus this conversion would always require O(n) space)
                 tuples = [
-                    (key_filler(k), value_filler(v))
+                    (self.key_filler(k), self.value_filler(v))
                     for k, v in value.items()
                 ]
                 if any(
@@ -333,13 +349,20 @@ class GenericMappingFiller(WrapperFiller):
                 else:
                     return value
 
+    def sub_filler(self, key):
+        if key == 0:
+            return self.key_filler
+        if key == 1:
+            return self.value_filler
+        return super().sub_filler(key)
+
 
 class DefaultDictFiller(GenericMappingFiller):
     """
     A filler for generic defaultdicts
     """
 
-    def reconstruct(self, tuples, initial: defaultdict):
+    def reconstruct(self, tuples, initial):
         return type(initial)(initial.default_factory, tuples)
 
 

@@ -111,11 +111,16 @@ class RecordField:
             ret._apply(arg)
         return ret
 
+    def _apply_to_filler(self, token, sub_filler_key=None):
+        target_filler = self.filler.sub_filler(sub_filler_key)
+        target_filler.apply(token)
+
     @decorator_kw_method
-    def add_validator(self, func, **kwargs):
+    def add_validator(self, func, sub_key=None, **kwargs):
         """
         add a ``CallValidation`` to the field's filler.
         :param func: the callable to wrap inside the ``CallValidation``
+        :param sub_key: the key (if any) of the sub-filler to add the validator to.
         :param kwargs: all kwargs are forwarded to ``CallValidation``
         :return: func, to use as a decorator
         .. warning:: *must* be used inside of the owner class's `pre_bind` class method.
@@ -134,14 +139,15 @@ class RecordField:
                     def validator1(a):
                         ...
         """
-        self.filler.apply(CallValidation(func, **kwargs))
+        self._apply_to_filler(CallValidation(func, **kwargs), sub_filler_key=sub_key)
         return func
 
     @decorator_kw_method
-    def add_assert_validator(self, func, **kwargs):
+    def add_assert_validator(self, func, sub_key=None, **kwargs):
         """
         add a ``AssertCallValidation`` to the field's filler.
         :param func: the callable to wrap inside the ``AssertCallValidation``
+        :param sub_key: the key (if any) of the sub-filler to add the validator to.
         :param kwargs: all kwargs are forwarded to ``AssertCallValidation``
         :return: func, to use as a decorator
         .. warning:: *must* be used inside of the owner class's `pre_bind` class method.
@@ -160,14 +166,15 @@ class RecordField:
                     def validator1():
                         ...
         """
-        self.filler.apply(AssertCallValidation(func, **kwargs))
+        self._apply_to_filler(AssertCallValidation(func, **kwargs), sub_filler_key=sub_key)
         return func
 
     @decorator_kw_method
-    def add_coercer(self, func, **kwargs):
+    def add_coercer(self, func, sub_key=None, **kwargs):
         """
         add a ``CallCoercion`` to the field's filler.
         :param func: the callable to wrap inside the ``CallCoercion``
+        :param sub_key: the key (if any) of the sub-filler to add the coercer to.
         :param kwargs: all kwargs are forwarded to ``CallCoercion``
         :return: func, to use as a decorator
         .. warning:: *must* be used inside of the owner class's `pre_bind` class method.
@@ -186,7 +193,7 @@ class RecordField:
                     def coercion1(a):
                         ...
         """
-        self.filler.apply(CallCoercion(func, **kwargs))
+        self._apply_to_filler(CallCoercion(func, **kwargs), sub_filler_key=sub_key)
         return func
 
     def _apply(self, token):
