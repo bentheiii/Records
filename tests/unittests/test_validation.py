@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from pytest import mark, raises, warns
 
 from records import (Annotated, AssertCallValidation, CallValidation, Clamp, Cyclic, FullMatch, Loose, RecordBase,
-                     Truth, TypeCheckStyle, Within, check)
+                     Truth, TypeCheckStyle, Within, check, parser, SelectableFactory)
 
 
 def ACls(T, *args):
@@ -47,11 +47,32 @@ def test_between_10_100(T):
         a(100)
 
 
+@mark.parametrize('T', [int, float])
+def test_bad_between_10_100(T):
+    with raises(ValueError):
+        ACls(T, Loose, Within(100, lt=100))
+    ACls(T, Loose, Within(100, lt=100, l_eq=True))
+    with raises(ValueError):
+        ACls(T, Loose, Within(101, lt=100, l_eq=True))
+
+
 def test_clamp():
     a = ACls(int, Clamp(10, 100))
     a(15, 15)
     a(101, 100)
     a(3, 10)
+
+
+def test_const_clamp():
+    a = ACls(int, Clamp(10, 10))
+    a(15, 10)
+    a(101, 10)
+    a(3, 10)
+
+
+def test_bad_clamp():
+    with raises(ValueError):
+        ACls(int, Clamp(15, 10))
 
 
 def test_Cyclic():
@@ -129,7 +150,7 @@ def test_char():
 
     assert A('1').c == '1'
     assert A(b'x').c == b'x'
-    with raises(ValueError):
+    with raises(TypeError):
         A('12')
 
 
@@ -216,3 +237,29 @@ def test_post_new_check():
 
     with raises(AssertionError):
         A(a=4, b=3, c=12)
+
+
+def test_post_new_check_with_unary():
+    class A(RecordBase, default_type_check=check, unary_parse=True):
+        a: int
+        b: int = 1
+        c: int = 2
+
+        def post_new(self):
+            assert self.a <= self.b <= self.c
+
+        @parser
+        @SelectableFactory
+        @classmethod
+        def from_int(cls, v):
+            return {'a': v, 'b': v + 1, 'c': v + 2}
+
+        def __iter__(self):
+            yield from [self.a, self.b, self.c]
+
+    assert list(A(a=0, b=3, c=12)) == [0, 3, 12]
+
+    with raises(AssertionError):
+        A(a=4, b=3, c=12)
+
+    assert A(15) == A(a=15, b=16, c=17)

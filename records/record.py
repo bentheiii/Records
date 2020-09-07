@@ -271,11 +271,9 @@ class RecordBase:
         A "virtual" field used when extracting data, to mimic an actual field
         """
         name: str
-        has_default: bool = False
-        tags = frozenset()
 
-        def is_default(self, v):
-            return False
+        tags = frozenset()
+        has_default = False
 
     @classmethod
     def _to_dict(cls, obj, include_defaults=False, sort=None,
@@ -314,23 +312,26 @@ class RecordBase:
             return f.name in whitelist_keys \
                    or include_defaults or not (f.has_default and f.is_default(v))
 
+        missing_ok = cls._optional_keys
+        extraction_dict = cls._fields
+
         if _rev_select:
-            extraction_dict = dict(cls._fields)
+            missing_ok = set(missing_ok)
+            extraction_dict = dict(extraction_dict)
             for to_remove in _rev_select.keys_to_remove:
                 if to_remove in cls._fields:
                     continue
                 extraction_dict[to_remove] = cls._MockField(name=to_remove)
             for old, new in _rev_select.keys_to_rename:
-                extraction_dict.pop(new, None)
+                missing_ok.add(new)
                 extraction_dict[old] = cls._MockField(name=old)
             for old, new in _rev_select.keys_to_maybe_rename:
-                extraction_dict.pop(new, None)
-                extraction_dict[old] = cls._MockField(name=old, has_default=True, )
+                missing_ok.add(new)
+                missing_ok.add(old)
+                extraction_dict[old] = cls._MockField(name=old)
             for key, _ in _rev_select.keys_to_add:
                 extraction_dict.pop(key, _)
-            fields_to_extract = extraction_dict.values()
-        else:
-            fields_to_extract = cls._fields.values()
+        fields_to_extract = extraction_dict.values()
 
         def tuples():
             # inner function to lazily get the key-value tuples
@@ -341,10 +342,10 @@ class RecordBase:
                 try:
                     v = getattr(obj, field.name)
                 except AttributeError:
-                    if not field.has_default:
+                    if field.name not in missing_ok:
                         # we allow skipping missing fields if they have a default
                         raise
-                    if include_defaults:
+                    if include_defaults and field.has_default:
                         # but if the field is missing, and we expect to find it anyway, then we yield its tuple even
                         # though it was not present
                         yield field.name, field.make_default()

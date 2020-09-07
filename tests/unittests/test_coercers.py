@@ -8,7 +8,7 @@ from pytest import mark, raises
 
 from records import (Annotated, CallCoercion, ClassMethodCoercion, ComposeCoercer, Eval, FromInteger, Loose,
                      LooseUnpack, LooseUnpackMap, MapCoercion, RecordBase, Falsish, TypeCheckStyle, Whole,
-                     check, check_strict)
+                     check, check_strict, LiteralEval)
 from records.fillers.builtin_fillers.std_fillers import ToBytes
 
 
@@ -325,3 +325,65 @@ def test_eval_ellipsis():
     a('E.x', E.x)
     with raises(TypeError):
         a('1')
+
+
+def test_loose_coerced():
+    a = ACls(bytes, Loose.constrain(str)(encoding='ascii'))
+    a('abc', b'abc')
+    with raises(TypeError):
+        a(12)
+
+
+def test_loose_t():
+    a = ACls(int, Loose.constrain(float))
+    a(1.5, 1)
+    with raises(TypeError):
+        a("12")
+
+
+def test_loose_unpack_coerced():
+    a = ACls(slice, LooseUnpack.constrain(int, int))
+    a(slice(1, 10, 2), slice(1, 10, 2))
+    a((1, 10), slice(1, 10))
+    with raises(TypeError):
+        a((10,))
+    with raises(TypeError):
+        a((10, 'a'))
+    with raises(TypeError):
+        a((10, 3, 5))
+
+
+def test_loose_unpack_coerced_varg():
+    class T(tuple):
+        def __new__(cls, *args):
+            return super().__new__(cls, args)
+
+    a = ACls(T, LooseUnpack.constrain(int, ...))
+    a([1, 5, 3, 2, 154], T(1, 5, 3, 2, 154))
+    a((1, 10), T(1, 10))
+    a((), T())
+    with raises(Exception):
+        a((10, 'a'))
+
+
+def test_loose_unpackmap_coerced():
+    t = namedtuple('t', 'a b c', defaults=(0,))
+    a = ACls(t, LooseUnpackMap.constrain(a=int, b=object, c=int))
+    a({'a': 1, 'b': 'hi', 'c': 15}, t(1, 'hi', 15))
+    a({'a': 1, 'b': 'hi'}, t(1, 'hi', 0))
+    with raises(Exception):
+        a({'a': '1', 'b': 'hi'})
+    with raises(Exception):
+        a({'b': 'hi'})
+
+
+def test_literal_eval():
+    a = ACls(list, LiteralEval)
+    a('[1,2,""]', [1, 2, ""])
+    with raises(TypeError):
+        a('list()')
+
+
+def test_bad_literal_eval():
+    with raises(TypeError):
+        ACls(Iterable, LiteralEval)

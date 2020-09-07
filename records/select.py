@@ -259,8 +259,9 @@ class Exporter(Generic[T]):
         if isinstance(func, staticmethod):
             func = func.__func__
         self.func = func
+        self.owner: Optional[type] = None
 
-    def run(self, instance, export_args, export_kwargs, select, args, kwargs):
+    def run(self, cls, instance, export_args, export_kwargs, select, args, kwargs):
         """
         runs the exporter
         :param instance: The instance to export
@@ -271,7 +272,7 @@ class Exporter(Generic[T]):
         :param kwargs: the keyword arguments of ``self.func``
         :return: the result of ``func`` over the final mapping
         """
-        mapping = instance._to_dict(instance, *export_args, **export_kwargs)
+        mapping = cls._to_dict(instance, *export_args, **export_kwargs)
         mapping = select(mapping)
         return self.func(mapping, *args, **kwargs)
 
@@ -280,7 +281,7 @@ class Exporter(Generic[T]):
         Get a bound instance of an exporter function.
         """
         if instance is None:  # pragma: no cover
-            return self
+            return self.BoundToClass(self, owner, (), {}, Select.empty)
         return self.Bound(self, instance, (), {}, Select.empty)
 
     class Bound:
@@ -303,7 +304,8 @@ class Exporter(Generic[T]):
             self.select_ = select
 
         def __call__(self, *args, **kwargs):
-            return self.descriptor.run(self.owner, self.export_args, self.export_kwargs, self.select_, args, kwargs)
+            return self.descriptor.run(self.owner, self.owner, self.export_args, self.export_kwargs, self.select_, args,
+                                       kwargs)
 
         def select(self, *selects: Select, **kwargs):
             """
@@ -325,6 +327,11 @@ class Exporter(Generic[T]):
             return type(self)(self.descriptor, self.owner, (*self.export_args, *args), {**self.export_kwargs, **kwargs},
                               self.select_)
 
+    class BoundToClass(Bound):
+        def __call__(self, instance, *args, **kwargs):
+            return self.descriptor.run(self.owner, instance, self.export_args, self.export_kwargs, self.select_, args,
+                                       kwargs)
+
 
 class NoArgExporter(Exporter):
     """
@@ -332,5 +339,5 @@ class NoArgExporter(Exporter):
      `RecordBase._to_dict`_
     """
 
-    def run(self, instance, export_args, export_kwargs, select, args, kwargs):
-        return super().run(instance, (*export_args, *args), {**export_kwargs, **kwargs}, select, (), {})
+    def run(self, cls, instance, export_args, export_kwargs, select, args, kwargs):
+        return super().run(cls, instance, (*export_args, *args), {**export_kwargs, **kwargs}, select, (), {})

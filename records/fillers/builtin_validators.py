@@ -112,7 +112,7 @@ class Within(AssertValidation):
         self.lt = lt
         self.g_eq = g_eq
         self.l_eq = l_eq
-        if ge > lt or (not g_eq and not l_eq and ge == lt):
+        if ge > lt or ((not g_eq or not l_eq) and ge == lt):
             raise ValueError('the lower bound must not be greater then the upper bound')
 
     def assert_(self, v) -> bool:

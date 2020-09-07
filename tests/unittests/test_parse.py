@@ -145,5 +145,9 @@ def test_custom_parser(frozen):
 
 def test_select_frominstance(Point):
     mp = SimpleNamespace(x=1, Y=2)
-    p = Point.from_instance.select(keys_to_rename=[('Y', 'y')])(mp)
+    p = Point.from_instance.select(keys_to_rename=[('Y', 'y')], keys_to_maybe_rename=[('X', 'x')])(mp)
+    assert p == Point(x=1, y=2)
+    p = Point.from_instance.select(keys_to_maybe_rename=[('Y', 'y'), ('X', 'x')])(mp)
+    assert p == Point(x=1, y=2)
+    p = Point.from_instance.select(keys_to_remove='Y', keys_to_add=[('y', 2)])(mp)
     assert p == Point(x=1, y=2)

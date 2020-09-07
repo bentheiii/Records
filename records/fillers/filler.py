@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from enum import Enum, IntEnum, auto
-from typing import Any, Callable, Generic, List, Optional, TypeVar
+from typing import Any, Callable, Generic, List, Optional, TypeVar, NamedTuple
 
 from records.fillers.coercers import CoercionToken
 from records.fillers.util import _as_instance
@@ -71,33 +71,9 @@ class TypePassKind(IntEnum):
 T = TypeVar('T')
 
 
-class TypeCheckingProcess(Generic[T]):
-    """
-    an abstract class representing type validation of a filling
-    """
-
-    @abstractmethod
-    def __call__(self) -> ValidationProcess[T]:
-        """
-        process the type validation
-        :return: a ``ValidationProcess`` representing the remainder of the validation
-        """
-        pass
-
-
-class ValidationProcess(Generic[T]):
-    """
-    an abstract class representing value validation of a filling
-    """
-    type_pass: TypePassKind
-    """the passing kind of the validation, how did the value succeed in type valdiation"""
-
-    def __call__(self) -> T:
-        """
-        process the value validation
-        :return: the final, validated, filled value
-        """
-        pass
+class FillingSuccess(NamedTuple, Generic[T]):
+    value: T
+    type_pass_kind: TypePassKind
 
 
 class Filler(Generic[T]):
@@ -109,11 +85,11 @@ class Filler(Generic[T]):
         self.owner = None
 
     @abstractmethod
-    def fill(self, arg) -> TypeCheckingProcess[T]:
+    def fill(self, arg) -> FillingSuccess[T]:
         """
         Begin filling a value to match the filler's type checking and validation
         :param arg: the initial value to use
-        :return: a ``TypeCheckingProcess`` representing an uninitialized filling process
+        :return: a ``FillingSuccess`` representing a successful filling process
         """
         pass
 
@@ -150,7 +126,7 @@ class Filler(Generic[T]):
         :return: `arg` after coercion and validation.
         """
         tc = self.fill(arg)
-        return tc()()
+        return tc.value
 
 
 class TypeMatch(Enum):
@@ -190,8 +166,37 @@ class AnnotatedFiller(Filler, Generic[T]):
     def fill(self, arg):
         if self.type_checking_style == TypeCheckStyle.default:  # pragma: no cover
             raise Exception
+        elif self.type_checking_style == TypeCheckStyle.hollow:
+            tpk = TypePassKind.hollow
+        else:
+            tp = self.type_check(arg)
+            if tp == TypeMatch.exact:
+                tpk = TypePassKind.no_coerce_strict
+            elif tp == TypeMatch.inexact and self.type_checking_style == TypeCheckStyle.check:
+                tpk = TypePassKind.no_coerce
+            else:
+                # perform coercion
+                if not self.coercers:
+                    raise TypeError(f'failed type checking for value of type {type(arg)}')
+                for i, coercer in enumerate(self.coercers):
+                    try:
+                        arg = coercer(arg)
+                        tc = self.type_check(arg)
+                        if tc is None \
+                                or (tc == TypeMatch.inexact and self.type_checking_style != TypeCheckStyle.check):
+                            raise TypeError(f'coercer returned value of wrong type: {type(arg)}')
+                    except Exception:
+                        if i == len(self.coercers) - 1:
+                            raise
+                    else:
+                        break
+                tpk = TypePassKind.coerce
 
-        return AnnotatedTypeCheckingProcess(self, arg)
+        # validation
+        for validator in self.validators:
+            arg = validator(arg)
+
+        return FillingSuccess(arg, tpk)
 
     def bind(self, owner_cls):
         for arg in self.args:
@@ -249,61 +254,3 @@ class AnnotatedFiller(Filler, Generic[T]):
 
     def is_hollow(self) -> bool:
         return self.type_checking_style == TypeCheckStyle.hollow
-
-
-class AnnotatedTypeCheckingProcess(TypeCheckingProcess):
-    """
-    The type checking process for `AnnotatedFiller`
-    """
-
-    def __init__(self, owner: AnnotatedFiller, value):
-        self.owner = owner
-        self.value = value
-
-    def _validation_process(self, arg, success: TypePassKind):
-        return AnnotatedValidationProcess(self.owner, arg, success)
-
-    def __call__(self):
-        if self.owner.type_checking_style == TypeCheckStyle.hollow:
-            return self._validation_process(self.value, TypePassKind.hollow)
-        else:
-            tp = self.owner.type_check(self.value)
-            if tp == TypeMatch.exact:
-                return self._validation_process(self.value, TypePassKind.no_coerce_strict)
-            elif tp == TypeMatch.inexact and self.owner.type_checking_style == TypeCheckStyle.check:
-                return self._validation_process(self.value, TypePassKind.no_coerce)
-            else:
-                # perform coercion
-                if not self.owner.coercers:
-                    raise TypeError(f'failed type checking for value of type {type(self.value)}')
-                for i, coercer in enumerate(self.owner.coercers):
-                    try:
-                        arg = coercer(self.value)
-                        tc = self.owner.type_check(arg)
-                        if tc is None \
-                                or (tc == TypeMatch.inexact and self.owner.type_checking_style != TypeCheckStyle.check):
-                            raise TypeError(f'coercer returned value of wrong type: {type(arg)}')
-                    except Exception:
-                        if i == len(self.owner.coercers) - 1:
-                            raise
-                    else:
-                        break
-                return self._validation_process(arg, TypePassKind.coerce)
-
-
-class AnnotatedValidationProcess(ValidationProcess):
-    """
-    The validation process for `AnnotatedFiller`
-    """
-
-    def __init__(self, owner: AnnotatedFiller, value, type_checking_success: TypePassKind):
-        self.owner = owner
-        self.value = value
-        self.type_pass = type_checking_success
-
-    def __call__(self):
-        arg = self.value
-        for validator in self.owner.validators:
-            arg = validator(arg)
-
-        return arg

@@ -240,7 +240,7 @@ def test_complex_union():
     assert a.x == [12, 36, 12]
     a = A(6)
     assert a.x == 6
-    with raises(ValueError):
+    with raises(TypeError):
         A(['str'])
 
 

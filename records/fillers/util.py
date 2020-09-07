@@ -14,4 +14,7 @@ def _as_instance(obj, cls: Type[T]) -> Optional[T]:
         return obj
     elif isinstance(obj, type) and issubclass(obj, cls):
         return obj()
+    wrapped = getattr(obj, '__wrapped__', None)
+    if wrapped is not None:
+        return obj()
     return None

@@ -1,6 +1,6 @@
 from records.fillers.builtin_fillers.recurse import GetFiller
 from records.fillers.builtin_fillers.repo import builtin_filler_checkers, builtin_filler_map
-from records.fillers.filler import Filler, TypeCheckStyle, TypePassKind
+from records.fillers.filler import Filler, TypeCheckStyle, TypePassKind, FillingSuccess
 from records.utils.typing_compatible import get_args, get_origin, is_annotation
 
 
@@ -14,14 +14,7 @@ class DumbFiller(Filler):
         self.origin = origin
 
     def fill(self, arg):
-        def tc():
-            return v
-
-        def v():
-            return arg
-
-        v.type_pass = TypePassKind.hollow
-        return tc
+        return FillingSuccess(arg, TypePassKind.hollow)
 
     def bind(self, owner_cls):
         super().bind(owner_cls)

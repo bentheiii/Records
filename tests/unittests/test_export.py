@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO, StringIO
+from types import SimpleNamespace
 
 from pytest import fixture, mark
 
@@ -113,3 +114,22 @@ def test_whitelist(frozen):
     assert u.to_dict(whitelist_keys='w') == {"x": 3, "y": 2, "w": 0}
     assert u.to_dict(whitelist_keys=('w', 'y')) == {"x": 3, "y": 2, "w": 0}
     assert u.to_dict(blacklist_tags=Tag('b'), whitelist_keys='w') == {"x": 3, "w": 0}
+
+
+def test_export_dict_foreign(Point):
+    p = SimpleNamespace(x=3, y=1)
+    assert Point.to_dict(p) == {'x': 3, 'y': 1}
+    assert Point.to_dict(p, include_defaults=True) \
+           == Point.to_dict.export_with(include_defaults=True)(p) \
+           == {'x': 3, 'y': 1, 'z': 0}
+    assert tuple(Point.to_dict.export_with(sort=True)(p).values()) == (3, 1)
+    assert tuple(Point.to_dict
+                 .export_with(include_defaults=True, sort=-1)(p)
+                 .values()) \
+           == (0, 1, 3)
+    assert tuple(Point.to_dict
+                 .export_with(include_defaults=True, sort=lambda c: (ord(c) ** 2) % 7)(p)
+                 .values()) \
+           == (3, 0, 1)
+    assert Point.to_dict.select(keys_to_remove='x')(p, include_defaults=True) \
+           == {'y': 1, 'z': 0}

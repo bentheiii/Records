@@ -5,14 +5,12 @@ import contextlib
 from collections import defaultdict, deque
 from collections.abc import Callable as CallableBase
 from itertools import chain, islice
-from typing import Any, List, Optional, Sequence, TypeVar, Union
+from typing import Any, Sequence, TypeVar, Union
 
 from records.fillers.builtin_fillers.recurse import GetFiller
-from records.fillers.filler import (AnnotatedFiller, Filler, TypeCheckingProcess, TypeMatch, TypePassKind,
-                                    ValidationProcess)
+from records.fillers.filler import (AnnotatedFiller, Filler, TypeMatch, FillingSuccess, TypePassKind)
 from records.fillers.get_filler import get_annotated_filler, get_filler
 from records.utils.typing_compatible import get_args, get_origin
-
 
 try:
     from typing import Literal
@@ -20,61 +18,11 @@ except ImportError:  # pragma: no cover
     Literal = object()
 
 
-class UnionTypeCheckingProcess(TypeCheckingProcess):
-    """
-    A type checking process for union fillers, allowing parallel filling
-    """
-    def __init__(self, owner: UnionFiller, arg):
-        self.owner = owner
-        self.arg = arg
-
-    def __call__(self):
-        succeeded: Optional[List[ValidationProcess]] = None
-        succeeded_kind: Optional[TypePassKind] = None
-        for sf in self.owner.sub_fillers:
-            try:
-                validation: ValidationProcess = sf.fill(self.arg)()
-            except Exception:
-                continue
-            if succeeded_kind is None or validation.type_pass < succeeded_kind:
-                succeeded = [validation]
-                succeeded_kind = validation.type_pass
-            elif succeeded_kind == validation.type_pass:
-                succeeded.append(validation)
-        if not succeeded:
-            raise TypeError('no type checkers succeeded')
-
-        return UnionValidationProcess(self.owner, succeeded, succeeded_kind)
-
-
-class UnionValidationProcess(ValidationProcess):
-    """
-    A validation process for union fillers
-    """
-    def __init__(self, owner: UnionFiller, validations: List[ValidationProcess], type_pass: TypePassKind):
-        self.owner = owner
-        self.validations = validations
-        self.type_pass = type_pass
-
-    def __call__(self):
-        good_results = []
-        for validator_process in self.validations:
-            try:
-                result = validator_process()
-            except Exception:
-                continue
-            good_results.append((result, validator_process))
-        if not good_results:
-            raise ValueError('no validators succeeded')
-        elif len(good_results) > 1:
-            raise ValueError(f'multiple validator success: {[gvt for (_, gvt) in good_results]}')
-        return good_results[0][0]
-
-
 class UnionFiller(Filler):
     """
     A filler for union types.
     """
+
     def __init__(self, origin, args):
         super().__init__()
         self.args = args
@@ -100,15 +48,25 @@ class UnionFiller(Filler):
         * Validation succeeds only if exactly one sub-filler succeeded.
         """
         if self.is_hollow():
-            def tc():
-                return v
+            return FillingSuccess(arg, TypePassKind.hollow)
+        best_results = []
+        best_key = float('inf')
+        for i, sub_filler in enumerate(self.sub_fillers):
+            try:
+                success = sub_filler.fill(arg)
+            except Exception:
+                if not best_results and i + 1 == len(self.sub_fillers):
+                    raise
+                continue
+            if success.type_pass_kind < best_key:
+                best_results = [success.value]
+                best_key = success.type_pass_kind
+            elif success.type_pass_kind == best_key:
+                best_results.append(success.value)
 
-            def v():
-                return arg
-
-            v.type_pass = TypePassKind.hollow
-            return tc
-        return UnionTypeCheckingProcess(self, arg)
+        if len(best_results) > 1:
+            raise ValueError('multiple sub-fillers matched')
+        return FillingSuccess(best_results[0], best_key)
 
     def bind(self, owner_cls):
         super().bind(owner_cls)
@@ -127,6 +85,7 @@ class LiteralFiller(AnnotatedFiller):
     """
     A filler for literal types.
     """
+
     def __init__(self, origin, args):
         super().__init__(origin, args)
         self.possible_values = defaultdict(set)
@@ -153,6 +112,7 @@ class WrapperFiller(Filler):
     """
     A convenience class for fillers to wrap other fillers, with additional functionality (usually adding validators)
     """
+
     def __init__(self, origin, args):
         super().__init__()
         self.inner_filler = get_annotated_filler(origin, args)
@@ -175,6 +135,7 @@ class TypeFiller(WrapperFiller):
     """
     A filler for a parameterized typing.Type
     """
+
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.base_type = get_args(origin)[0]
@@ -194,6 +155,7 @@ class TupleFiller(WrapperFiller):
     """
     A filler for a parameterized typing.Tuple
     """
+
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_args = get_args(origin)
@@ -276,6 +238,7 @@ class GenericIterableFiller(WrapperFiller):
     """
     A filler for generic variants of concrete iterable classes.
     """
+
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_type = get_args(origin)[0]
@@ -320,6 +283,7 @@ class GenericDequeFiller(GenericIterableFiller):
     """
     A filler for generic deques
     """
+
     def reconstruct(self, elements, initial: deque):
         return type(initial)(elements, initial.maxlen)
 
@@ -328,6 +292,7 @@ class GenericMappingFiller(WrapperFiller):
     """
     A filler for generic variants of concrete mappings
     """
+
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.key_type, self.value_type = get_args(origin)
@@ -373,6 +338,7 @@ class DefaultDictFiller(GenericMappingFiller):
     """
     A filler for generic defaultdicts
     """
+
     def reconstruct(self, tuples, initial: defaultdict):
         return type(initial)(initial.default_factory, tuples)
 
@@ -381,6 +347,7 @@ class GenericFillerN(WrapperFiller):
     """
     A filler for generic non-concrete classes or classes that otherwise can't have their parameters type-checked.
     """
+
     def __init__(self, origin, args):
         super().__init__(get_origin(origin), args)
         self.inner_types = get_args(origin)
