@@ -24,8 +24,8 @@ if sys.version_info >= (3, 9, 0):  # pragma: no cover
         return isinstance(t, _AnnotatedAlias)
 else:  # pragma: no cover
     class Annotated:
-        def __init__(self, origin, *args):
-            self.__origin__ = origin
+        def __init__(self, *args):
+            self.__origin__ = type(self)
             self.__args__ = args
 
         def __class_getitem__(cls, item):
@@ -55,7 +55,8 @@ else:  # pragma: no cover
 def split_annotation(v):
     if not is_annotation(v):
         return v, ()
-    return get_origin(v), get_args(v)
+    t, *args = get_args(v)
+    return t, args
 
 
 __all__ = ['get_args', 'get_origin', 'Annotated', 'get_type_hints', 'is_annotation', 'split_annotation']

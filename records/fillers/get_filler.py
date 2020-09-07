@@ -1,7 +1,7 @@
 from records.fillers.builtin_fillers.recurse import GetFiller
 from records.fillers.builtin_fillers.repo import builtin_filler_checkers, builtin_filler_map
 from records.fillers.filler import Filler, TypeCheckStyle, TypePassKind, FillingSuccess
-from records.utils.typing_compatible import get_args, get_origin, is_annotation
+from records.utils.typing_compatible import get_args, get_origin, is_annotation, split_annotation
 
 
 class DumbFiller(Filler):
@@ -34,10 +34,7 @@ def get_filler(stored_type) -> Filler:
     :param stored_type: the type annotation to use as the storage type
     :return: the `Filler` to fill targeting `storage_type`
     """
-    if not is_annotation(stored_type):
-        return get_annotated_filler(stored_type, ())
-    origin = get_origin(stored_type)
-    args = get_args(stored_type)
+    origin, args = split_annotation(stored_type)
     return get_annotated_filler(origin, args)
 
 

@@ -9,7 +9,6 @@ python = "^3.7"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
-isort = "*"
 flake8 = {version = "*", allow-prereleases = true}
 pytest-cov = "*"
 
