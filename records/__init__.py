@@ -34,6 +34,5 @@ __all__ = [
 #  * fill on assign? post_init_on assign? invariant?!
 #  * more examples
 #  * typevars?
-#  * ways to add validators to sub-parsers
 #  * allow multiple validators to succeed in Unions if they produce the same value
 #  * todo fill trace-back (Union[Annotated[int, Negative], Annotated[bool, Loose]])
