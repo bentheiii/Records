@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar, Dict, Final, Set, Union
+from typing import ClassVar, Dict, Set, Union
 
 from records.fillers import AssertCallValidation, CallCoercion, CallValidation
 from records.fillers.filler import Filler
@@ -8,6 +8,11 @@ from records.fillers.get_filler import get_filler
 from records.tags import Tag
 from records.utils.decorators import decorator_kw_method
 from records.utils.typing_compatible import get_args, get_origin, split_annotation
+
+try:
+    from typing import Final
+except ImportError:
+    Final = object()
 
 NO_DEFAULT = object()
 SKIP_FIELD = object()
@@ -95,7 +100,7 @@ class RecordField:
         meta_org = get_origin(origin)
         if meta_org == ClassVar:
             return SKIP_FIELD
-        if meta_org == Final:
+        if meta_org is Final:
             if not owner.is_frozen():
                 raise TypeError('cannot declare Final field in non-frozen Record')
             ret = cls.from_type_hint(get_args(origin)[0], owner=owner, **kwargs)
