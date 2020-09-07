@@ -1,7 +1,7 @@
 from records.fillers.builtin_fillers.recurse import GetFiller
 from records.fillers.builtin_fillers.repo import builtin_filler_checkers, builtin_filler_map
 from records.fillers.filler import Filler, TypeCheckStyle, TypePassKind, FillingSuccess
-from records.utils.typing_compatible import get_args, get_origin, is_annotation, split_annotation
+from records.utils.typing_compatible import split_annotation
 
 
 class DumbFiller(Filler):
