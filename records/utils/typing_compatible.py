@@ -9,15 +9,18 @@ from typing import Callable, get_type_hints
 if sys.version_info >= (3, 8, 0):  # pragma: no cover
     from typing import get_args, get_origin
 else:  # pragma: no cover
-    from operator import attrgetter
+    def get_origin(v):
+        return getattr(v, '__origin__', None)
 
-    get_origin = attrgetter('__origin__')
-    get_args = attrgetter('__args__')  # todo callable needs special case
+
+    def get_args(v):
+        return getattr(v, '__args__', None)  # todo callable needs special case
 
 if sys.version_info >= (3, 9, 0):  # pragma: no cover
     from typing import Annotated, _AnnotatedAlias
 
     get_type_hints = partial(get_type_hints, include_extras=True)
+
 
     def is_annotation(t):
         return isinstance(t, _AnnotatedAlias)
@@ -33,17 +36,22 @@ else:  # pragma: no cover
         def __call__(self, *args, **kwargs):
             raise TypeError
 
+
     Annotated.__origin__ = Annotated
+
 
     def is_annotation(t):
         return isinstance(t, Annotated)
+
 
     if sys.version_info >= (3, 8, 0):  # pragma: no cover
         _origins = get_origin
         _args = get_args
 
+
         def get_origin(v):
             return _origins(v) or getattr(v, '__origin__', None)
+
 
         def get_args(v):
             if v is Callable:

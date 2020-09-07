@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "records"
+name = "recordclasses"
 version = "0.0.1"
 description = "Record Classes"
 authors = ["Ben Avrahami"]
