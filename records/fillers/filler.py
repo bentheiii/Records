@@ -71,8 +71,8 @@ class TypePassKind(IntEnum):
 T = TypeVar('T')
 
 
-class FillingSuccess(NamedTuple, Generic[T]):
-    value: T
+class FillingSuccess(NamedTuple):
+    value: Any
     type_pass_kind: TypePassKind
 
 
