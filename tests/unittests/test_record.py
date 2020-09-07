@@ -1,11 +1,16 @@
 from math import isclose
 from types import SimpleNamespace
-from typing import ClassVar, Dict, Final, Hashable, List, Set
+from typing import ClassVar, Dict, Hashable, List, Set
 
 from pytest import fixture, mark, raises, skip
 
 from records import Annotated, Factory, RecordBase, Tag
 from records.select import Select
+
+try:
+    from typing import Final
+except ImportError:
+    Final = None
 
 
 @fixture(params=[True, False], ids=['frozen', 'mutable'])
@@ -182,6 +187,10 @@ def test_autofactory_underride(frozen):
     assert Aggregator(3).addends is Aggregator(3).addends is n
 
 
+skip_without_final = mark.skipif(not Final, reason='Final not defined in standard library')
+
+
+@skip_without_final
 @mark.parametrize('frozen', [True, False])
 def test_bad_record(frozen):
     with raises(TypeError):
@@ -190,6 +199,7 @@ def test_bad_record(frozen):
             x: Final
 
 
+@skip_without_final
 def test_bad_record_frozen_spec():
     with raises(TypeError):
         class _(RecordBase):
@@ -197,6 +207,7 @@ def test_bad_record_frozen_spec():
             x: Final[int]
 
 
+@skip_without_final
 def test_record_frozen_spec():
     class A(RecordBase, frozen=True):
         # noinspection PyFinal
