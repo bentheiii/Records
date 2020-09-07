@@ -1,9 +1,14 @@
 from numbers import Number
-from typing import Dict, Iterable, List, Literal, Sequence, Tuple, Type, Union
+from typing import Dict, Iterable, List, Sequence, Tuple, Type, Union
 
 from pytest import mark, raises
 
 from records import Annotated, RecordBase, TypeCheckStyle
+
+try:
+    from typing import Literal
+except ImportError:
+    Literal = None
 
 
 def ACls(T):
@@ -43,6 +48,7 @@ def test_list_strict():
         ACls(Sequence[Annotated[str, TypeCheckStyle.check_strict]])
 
 
+@mark.skipif(Literal is None, reason='Literal cannot be imported')
 def test_literal():
     A = ACls(Literal['a', 'b', 2, 0])
     a = A('b')
