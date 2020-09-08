@@ -9,6 +9,7 @@ from records.record import RecordBase, parser, exclude_from_ordering
 from records.select import SelectableFactory
 from records.tags import Tag
 from records.utils.typing_compatible import Annotated
+from records._version import __version__
 
 check = TypeCheckStyle.check
 check_strict = TypeCheckStyle.check_strict
@@ -27,7 +28,9 @@ __all__ = [
     'SelectableFactory',
 
     'Eval', 'LiteralEval', 'Loose', 'LooseUnpack', 'LooseUnpackMap', 'Whole', 'FromInteger',
-    'Falsish'
+    'Falsish',
+
+    '__version__'
 ]
 
 # TODO:
