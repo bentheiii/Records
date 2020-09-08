@@ -37,4 +37,3 @@ __all__ = [
 #  * fill on assign? post_init_on assign? invariant?!
 #  * more examples
 #  * typevars?
-#  * todo fill trace-back (Union[Annotated[int, Negative], Annotated[bool, Loose]])
