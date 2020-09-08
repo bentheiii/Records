@@ -16,5 +16,5 @@ class Tag:
         return type(other) == type(self) \
                and self.inner == other.inner
 
-    def __repr__(self):  # pragma: no cover
+    def __repr__(self):
         return f'Tag({self.inner!r})'

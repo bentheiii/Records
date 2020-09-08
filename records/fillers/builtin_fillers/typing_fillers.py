@@ -14,7 +14,7 @@ from records.utils.typing_compatible import get_args, get_origin
 
 try:
     from typing import Literal
-except ImportError:  # pragma: no cover
+except ImportError:
     Literal = object()
 
 
@@ -64,8 +64,9 @@ class UnionFiller(Filler):
             elif success.type_pass_kind == best_key:
                 best_results.append(success.value)
 
-        if len(best_results) > 1:
+        if len(best_results) > 1 and any(r is not best_results[0] for r in best_results[1:]):
             raise ValueError('multiple sub-fillers matched')
+
         return FillingSuccess(best_results[0], best_key)
 
     def bind(self, owner_cls):

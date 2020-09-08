@@ -16,7 +16,7 @@ from records.utils.typing_compatible import get_type_hints
 
 try:
     from typing import Final
-except ImportError:  # pragma: no cover
+except ImportError:
     Final = object()
 
 NO_ARG = object()
