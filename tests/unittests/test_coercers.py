@@ -435,3 +435,20 @@ def test_sub_filler_union():
                 raise TypeError
 
     assert A(b'hello there') == A('hello there')
+
+
+def test_identical_union():
+    class A:
+        pass
+
+    class B:
+        pass
+
+    class C(A, B):
+        pass
+
+    class R(RecordBase):
+        x: Union[Annotated[A, check], Annotated[B, check]]
+
+    c = C()
+    assert R(c).x is c
