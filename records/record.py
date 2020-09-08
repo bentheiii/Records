@@ -47,6 +47,9 @@ FORBIDDEN_CLASS_ATTRS = ('__init__', '__setattr__', '__hash__')
 
 # noinspection PyNestedDecorators
 class RecordBase:
+    """
+    A superclass to all record classes
+    """
     __slots__ = '_hash',
 
     # a dict of fields, by name
@@ -70,9 +73,12 @@ class RecordBase:
                           default_type_check=TypeCheckStyle.hollow, **kwargs):
         """
         sets up the record subclass
+
         :param frozen: Whether the class should be considered immutable (and thus, hashable)
+
         :param unary_parse: Whether to enable unary parsing. By default is only disabled if the class has exactly one
          required field.
+
         :param default_type_check: The default type checking style of the class, all fields will use this style unless
          otherwise specified.
         """
@@ -149,21 +155,25 @@ class RecordBase:
     @classmethod
     def pre_bind(cls):
         """
-        A class method that gets called when the class is initialized, but before all the field fillers are bound to
-         the class. Subclasses may override this method and add validators and coercers to fields.
+        A class method that gets called when the class is initialized, but before all the field fillers are bound to the
+        class. Subclasses may override this method and add validators and coercers to fields.
         """
         pass
 
     def __new__(cls, arg=NO_ARG, **kwargs):
         """
         Create an instance of the class.
-        :param arg: If there is exactly one required field in the class (called the trivial field), the single
-         positional argument can be used to fill it. Alternatively, if ``unary_parse`` has been enabled, ``arg`` can be
-         used (without keyword arguments) to parse the argument.
+
+        :param arg:
+            If there is exactly one required field in the class (called the trivial field), the single
+            positional argument can be used to fill it. Alternatively, if ``unary_parse`` has been enabled, ``arg`` can be
+            used (without keyword arguments) to parse the argument.
+
         :param kwargs: The mapping is used to fill the values of all fields in the record instance.
+
         .. note::
             If ``arg`` can be interpreted as both a parsing argument and as the trivial field. A ``TypeError`` is
-             raised.
+            raised.
         """
         # parsing stores the parsing result, if any
         parsing = None
@@ -236,17 +246,16 @@ class RecordBase:
     def post_new(self: T) -> Optional[T]:
         """
         This method is called after an instance is created and all its fields filled. This method may throw an exception
-         to signal an invalid configuration.
+        to signal an invalid configuration.
 
-        :return: May return a new instance, in which case it will replace the instance created, or None to
-         keep it as is.
+        :return:
+            May return a new instance, in which case it will replace the instance created, or ``None`` to
+            keep it as is.
         """
         pass
 
     def __init__(self, arg=NO_ARG, **kwargs):
-        """
-        this init method ensures no other init methods run
-        """
+        # this init method ensures no other init methods run
         pass
 
     def __repr__(self, **kwargs):
@@ -282,18 +291,25 @@ class RecordBase:
                  _rev_select: Select = Select.empty) -> Dict[str, Any]:
         """
         Create a dict representing the values of the class's fields for an arbitrary objects
+
         :param obj: the object to get attributes from
+
         :param include_defaults: whether to include keys that match the default value.
+
         :param sort: whether to sort the keys of the dictionary numerically. If falsish, the keys will not be sorted.
-         If equal to -1, the items will be sorted in reverse lexicographic order. If callable, the items will be sorted
-         according to ``sort`` as a key. Otherwise, the items will be sorted lexicographically.
+        If equal to -1, the items will be sorted in reverse lexicographic order. If callable, the items will be sorted
+        according to ``sort`` as a key. Otherwise, the items will be sorted lexicographically.
         :param blacklist_tags: A ``Tag`` or set of ``Tag``s to ignore all fields with the ``Tag``.
+
         :param whitelist_keys: A field name or set of field names to include regardless of ``blacklist`` and
-         ``include_defaults``.
+        ``include_defaults``.
+
         :param _rev_select: A private `Select`, intended to be applied over the result, the function will attempt to
-         extract the appropriate keys to fit the select
+        extract the appropriate keys to fit the select
+
         :return: A ``dict`` object with key names as specified by ``include_defaults``, ``sort``, ``blacklist_tags``,
-         ``whitelist_keys``, and with values according to ``obj``'s attributes.
+        ``whitelist_keys``, and with values according to ``obj``'s attributes.
+
         :raises AttributeError: if ``obj`` lacks an attribute that has not been blacklisted
         """
         if isinstance(blacklist_tags, Tag):
@@ -399,9 +415,13 @@ class RecordBase:
     def from_mapping(cls, *maps: Mapping[str, Any], **kwargs: Any):
         """
         Convert a mapping to a Record instance.
+
         :param maps: Mappings to combine into field values.
+
         :param kwargs: Additional field name in the instance.
+
         :return: An instance of ``cls`` with arguments as described by the input mappings.
+
         .. note::
             This class method supports `selection`_.
         .. note::
@@ -414,11 +434,17 @@ class RecordBase:
     def from_instance(cls, v, *maps: Mapping[str, Any], _select=Select.empty, **kwargs):
         """
         Convert an object to a Record instance by attributes.
+
         :param v: An object to get attributes from.
+
         :param maps: Mappings to combine into field values.
+
         :param _select: a private `Select` to be used when extracting object attributes.
+
         :param kwargs: Additional field name in the instance.
+
         :return: An instance of ``cls`` with arguments as described by the input namespace and mappings.
+
         .. note::
             This class method supports `selection`_.
         .. note::
@@ -445,9 +471,13 @@ class RecordBase:
     def from_json(cls, v, **kwargs):
         """
         Convert a JSON mapping to a Record instance.
+
         :param v: An JSON dictionary string to get attributes from.
+
         :param kwargs: Additional field name in the instance.
+
         :return: An instance of ``cls`` with arguments as described by the JSON.
+
         .. note::
             This class method supports `selection`_.
         .. note::
@@ -460,9 +490,13 @@ class RecordBase:
     def from_json_io(cls, v, **kwargs):
         """
         Convert a JSON file to a Record instance.
+
         :param v: An JSON dictionary file string to get attributes from.
+
         :param kwargs: Additional field name in the instance.
+
         :return: An instance of ``cls`` with arguments as described by the JSON.
+
         .. note::
             This class method supports `selection`_.
         """
@@ -473,13 +507,19 @@ class RecordBase:
     def from_pickle(cls, v, *args, **kwargs):
         """
         Convert a pickled bytestring to a Record instance.
+
         :param v: A bytestring object.
-        :param args: forwarded to `pickle.loads`_
-        :param kwargs: forwarded to `pickle.loads`_
+
+        :param args: forwarded to ``pickle.loads``
+
+        :param kwargs: forwarded to ``pickle.loads``
+
         :return: An unpickled instance of ``cls``.
+
         .. note::
-            If the unpickling result succeeds but the result is nto an instance of ``cls``, then ``cls`` attempts
-            to parse the resulting object.
+            If the unpickling result succeeds but the result is nto an instance of ``cls``, then ``cls`` attempts to
+            parse the resulting object.\
+
         .. note::
             This class method is a registered parser that will be attempted when calling ``cls.parse``.
         """
@@ -492,10 +532,15 @@ class RecordBase:
     def from_pickle_io(cls, v, *args, **kwargs):
         """
         Convert a pickled file to a Record instance.
+
         :param v: A record bytestring object.
-        :param args: forwarded to `pickle.load`_
-        :param kwargs: forwarded to `pickle.load`_
+
+        :param args: forwarded to ``pickle.load``
+
+        :param kwargs: forwarded to ``pickle.load``
+
         :return: An unpickled instance of ``cls``.
+
         .. note::
             If the unpickling result succeeds but the result is nto an instance of ``cls``, then ``cls`` attempts
             to parse the resulting object.
@@ -509,9 +554,13 @@ class RecordBase:
     def parse(cls, v):
         """
         Attempt to run all registered parsers of ``cls`` to parse an object to a ``cls`` instance.
+
         :param v: the object to attempt to parse.
+
         :return: The result of the only parser to succeed (raises an exception in all other cases).
+
         :raise ParseFailure: If none of the registered parsers succeed.
+
         :raise TypeError: If more than one of the registered parsers succeed.
         """
         successes = []
@@ -544,12 +593,17 @@ class RecordBase:
     def to_json(v, *args, io=None, **kwargs) -> str:
         """
         export an instance to a JSON dictionary.
-        :param args: forwarded to either `json.dump`_ or `json.dumps`_
+
+        :param args: forwarded to either ``json.dump`` or ``json.dumps``
+
         :param io: If not ``None``, dumps ``self`` into ``io``.
-        :param kwargs: forwarded to either `json.dump`_ or `json.dumps`_
+
+        :param kwargs: forwarded to either ``json.dump`` or ``json.dumps``
+
         :return: ``None`` if ``io`` is not ``None``, otherwise a JSON string representing ``self``
+
         .. note::
-            This class method supports `selection`_ and `exporting arguments`_.
+            This class method supports selection and exporting arguments.
         """
         if io is None:
             return extras.json.dumps(v, *args, **kwargs)
@@ -558,9 +612,13 @@ class RecordBase:
     def to_pickle(self, *args, io=None, **kwargs) -> bytes:
         """
         export an instance to a pickled bytestring.
-        :param args: forwarded to either `pickle.dump`_ or `pickle.dumps`_
+
+        :param args: forwarded to either ``pickle.dump`` or ``pickle.dumps``
+
         :param io: If not ``None``, dumps ``self`` into ``io``.
-        :param kwargs: forwarded to either `pickle.dump`_ or `pickle.dumps`_
+
+        :param kwargs: forwarded to either ``pickle.dump`` or ``pickle.dumps``
+
         :return: ``None`` if ``io`` is not ``None``, otherwise a pickle bytestring representing ``self``
         """
         if io is None:

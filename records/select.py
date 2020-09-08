@@ -189,6 +189,7 @@ class SelectableFactory(Generic[T]):
             self.descriptor = descriptor
             self.owner_cls = owner_cls
             self.select_ = select
+            update_wrapper(self, self.descriptor)
 
         def __call__(self, *args, **kwargs):
             return self.descriptor.run(self.owner_cls, args, kwargs, self.select_)
@@ -261,6 +262,8 @@ class Exporter(Generic[T]):
         self.func = func
         self.owner: Optional[type] = None
 
+        update_wrapper(self, func)
+
     def run(self, cls, instance, export_args, export_kwargs, select, args, kwargs):
         """
         runs the exporter
@@ -302,6 +305,7 @@ class Exporter(Generic[T]):
             self.export_args = export_args
             self.export_kwargs = export_kwargs
             self.select_ = select
+            update_wrapper(self, self.descriptor)
 
         def __call__(self, *args, **kwargs):
             return self.descriptor.run(self.owner, self.owner, self.export_args, self.export_kwargs, self.select_, args,
