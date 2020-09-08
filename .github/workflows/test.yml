@@ -31,9 +31,6 @@ jobs:
     - name: Install dependencies
       run: |
         sh scripts/install.sh
-    - name: Lint
-      run: |
-        sh scripts/lint.sh
     - name: Tests
       run: |
         sh scripts/unittest.sh
@@ -42,3 +39,6 @@ jobs:
       with:
         file: ./coverage.xml
         flags: unittests
+    - name: Lint
+      run: |
+        sh scripts/lint.sh

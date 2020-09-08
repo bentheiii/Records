@@ -4,7 +4,7 @@ import records.extras as extras
 from records.fillers.validators import AssertValidation, GlobalValidationToken
 
 
-class _Least:  # pragma: no cover
+class _Least:
     """
     A simple object that is always less than any other object
     """
@@ -22,7 +22,7 @@ class _Least:  # pragma: no cover
         return self == other
 
 
-class _Greatest:  # pragma: no cover
+class _Greatest:
     """
     A simple object that is always greater than any other object
     """

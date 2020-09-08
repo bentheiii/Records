@@ -14,7 +14,7 @@ from records.utils.typing_compatible import get_args, get_origin
 
 try:
     from typing import Literal
-except ImportError:  # pragma: no cover
+except ImportError:
     Literal = object()
 
 

@@ -280,7 +280,7 @@ class Exporter(Generic[T]):
         """
         Get a bound instance of an exporter function.
         """
-        if instance is None:  # pragma: no cover
+        if instance is None:
             return self.BoundToClass(self, owner, (), {}, Select.empty)
         return self.Bound(self, instance, (), {}, Select.empty)
 
