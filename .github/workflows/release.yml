@@ -37,7 +37,7 @@ jobs:
         LIB_VER=$(python -c "exec(open('records._version.py').read()); print(__version__)")
         echo lib "$LIB_VER"
         [[ "$TOML_VER" == "$GIT_VER" ]]
-        [[ "$TOML_VER" == "LIB_VER" ]]
+        [[ "$TOML_VER" == "$LIB_VER" ]]
     - name: Publish
       env:
         PYPI_USERNAME: ${{ secrets.pypi_user }}
