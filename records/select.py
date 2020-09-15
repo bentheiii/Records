@@ -71,6 +71,7 @@ class Select:
     def merge(self, *others: Select, **kwargs):
         """
         combine several Selects into one
+
         :param others: other selects to combine with ``self``
         :param kwargs: additional arguments to create a select with, and merge it.
         :return: ``self``, all of ``others``, and a ``Select`` formed with ``kwargs``, combined into a single ``Select``
@@ -100,6 +101,7 @@ class Select:
         """
         :param mapping: The mapping to use as input
         :return: A modified ``Mapping`` as specified by ``self``
+
         .. warning::
             Any Mapping sent to this function should not be used anywhere else, as this function may modify it.
         """
@@ -143,6 +145,7 @@ T = TypeVar('T')
 class SelectableFactory(Generic[T]):
     """
     A class to hold class factories that can be configured with the ``select`` method
+
     .. Note::
         Users can create their own SelectableFactory by using this class as decorator (on top of ``@classmethod``)
     """
@@ -189,6 +192,7 @@ class SelectableFactory(Generic[T]):
             self.descriptor = descriptor
             self.owner_cls = owner_cls
             self.select_ = select
+            update_wrapper(self, self.descriptor, updated=())
 
         def __call__(self, *args, **kwargs):
             return self.descriptor.run(self.owner_cls, args, kwargs, self.select_)
@@ -250,6 +254,9 @@ class SpecializedShortcutFactory(SelectableShortcutFactory, SpecializedSelectabl
 class Exporter(Generic[T]):
     """
     An exported function that supports selection and additional exporting configuration
+
+    .. Note::
+        Users can create their own Exporter by using this class as decorator (on top of ``@staticmethod``)
     """
 
     def __init__(self, func: Callable):
@@ -260,6 +267,8 @@ class Exporter(Generic[T]):
             func = func.__func__
         self.func = func
         self.owner: Optional[type] = None
+
+        update_wrapper(self, func, updated=())
 
     def run(self, cls, instance, export_args, export_kwargs, select, args, kwargs):
         """
@@ -302,6 +311,7 @@ class Exporter(Generic[T]):
             self.export_args = export_args
             self.export_kwargs = export_kwargs
             self.select_ = select
+            update_wrapper(self, self.descriptor, updated=())
 
         def __call__(self, *args, **kwargs):
             return self.descriptor.run(self.owner, self.owner, self.export_args, self.export_kwargs, self.select_, args,
