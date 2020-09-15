@@ -168,8 +168,8 @@ class RecordBase:
 
         :param arg:
             If there is exactly one required field in the class (called the trivial field), the single
-            positional argument can be used to fill it. Alternatively, if ``unary_parse`` has been enabled, ``arg`` can be
-            used (without keyword arguments) to parse the argument.
+            positional argument can be used to fill it. Alternatively, if ``unary_parse`` has been enabled, ``arg`` can
+            be used (without keyword arguments) to parse the argument.
 
         :param kwargs: The mapping is used to fill the values of all fields in the record instance.
 
