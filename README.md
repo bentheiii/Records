@@ -4,6 +4,8 @@
 # Records
 Records is a python library that makes powerful structure classes easy.
 
+[API reference](https://records.readthedocs.io/en/latest/index.html)
+
 ## Simplest Example
 A feature of Records is that, by default, it does nothing more than a namedtuple or dataclass would.
 ```python
