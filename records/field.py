@@ -40,15 +40,27 @@ class RecordField:
         :param default: the default of the field, wrapped in ``Factory`` for factory functions, or the singleton
              ``NO_DEFAULT`` if there is no default.
         """
-        self.filler = filler
-        self.name = name
+        self.filler: Filler = filler
+        """
+        The filler instance when filling the field with arbitrary values
+        """
+        self.name: str = name
+        """
+        The name of the field
+        """
         default, is_factory = self._apply_factory(default)
 
         self.default = default
         self.default_is_factory = is_factory
         self.owner: type = owner
+        """
+        the class the field is first defined in
+        """
 
         self.tags: Set[Tag] = set()
+        """
+        The tags of the field
+        """
 
     def make_default(self):
         """
@@ -73,6 +85,7 @@ class RecordField:
         """
         :param v: the value to compare
         :return: whether ``v`` is equal to the default value, if one exists
+
         .. note::
             currently, fields with a factory default always return ``False`` for this method, this is subject to change
         """
@@ -88,6 +101,7 @@ class RecordField:
     def from_type_hint(cls, th, *, owner, **kwargs) -> Union[RecordField, type(SKIP_FIELD)]:
         """
         Create a field from a type hint.
+
         :param th: the type hint to use
         :param owner: the owner RecordBase subclass
         :param kwargs: all keyword arguments are forwarded to the ``RecordField.__init__``
@@ -119,11 +133,14 @@ class RecordField:
     def add_validator(self, func, sub_key=None, **kwargs):
         """
         add a ``CallValidation`` to the field's filler.
+
         :param func: the callable to wrap inside the ``CallValidation``
         :param sub_key: the key (if any) of the sub-filler to add the validator to.
         :param kwargs: all kwargs are forwarded to ``CallValidation``
         :return: func, to use as a decorator
+
         .. warning:: *must* be used inside of the owner class's `pre_bind` class method.
+
         .. code-block:: python
 
             class A(RecordBase):
@@ -146,11 +163,14 @@ class RecordField:
     def add_assert_validator(self, func, sub_key=None, **kwargs):
         """
         add a ``AssertCallValidation`` to the field's filler.
+
         :param func: the callable to wrap inside the ``AssertCallValidation``
         :param sub_key: the key (if any) of the sub-filler to add the validator to.
         :param kwargs: all kwargs are forwarded to ``AssertCallValidation``
         :return: func, to use as a decorator
+
         .. warning:: *must* be used inside of the owner class's `pre_bind` class method.
+
         .. code-block:: python
 
             class A(RecordBase):
@@ -173,11 +193,14 @@ class RecordField:
     def add_coercer(self, func, sub_key=None, **kwargs):
         """
         add a ``CallCoercion`` to the field's filler.
+
         :param func: the callable to wrap inside the ``CallCoercion``
         :param sub_key: the key (if any) of the sub-filler to add the coercer to.
         :param kwargs: all kwargs are forwarded to ``CallCoercion``
         :return: func, to use as a decorator
+
         .. warning:: *must* be used inside of the owner class's `pre_bind` class method.
+
         .. code-block:: python
 
             class A(RecordBase):
@@ -209,6 +232,7 @@ class FieldDict(Dict[str, RecordField]):
     def filter_by_tag(self, tag: Tag):
         """
         Filter the fields in the mapping to only those that have a tag
+
         :param tag: the tag to include
         :return: a new ``FieldDict`` including only the fields that possess tag_
         """

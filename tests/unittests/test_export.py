@@ -3,7 +3,7 @@ from __future__ import annotations
 from io import BytesIO, StringIO
 from types import SimpleNamespace
 
-from pytest import fixture, mark
+from pytest import fixture, mark, raises
 
 from records import Annotated, RecordBase, Tag, check
 
@@ -63,7 +63,9 @@ class Point_g(RecordBase):
 
 def test_pickle():
     p = Point_g(x=3, y=1, z=0)
-    assert Point_g(p.to_pickle()) == p
+    with raises(TypeError):
+        Point_g(p.to_pickle())
+    assert Point_g.from_pickle(p.to_pickle()) == p
 
     io = BytesIO()
     p.to_pickle(io=io)

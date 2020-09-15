@@ -27,7 +27,9 @@ exclude_from_ordering = Tag(object())
 def parser(func: Callable):
     """
     mark a callable as a parser for a record class and all its subclasses
+
     :param func: the function to mark
+
     :return: ``func``, to used as a decorator
     """
     func.__parser__ = True
@@ -52,22 +54,22 @@ class RecordBase:
     """
     __slots__ = '_hash',
 
-    # a dict of fields, by name
     _fields: ClassVar[FieldDict]
-    # a (immutable) set of field names that have no default value
+    """a dict of fields, by name"""
     _required_keys: ClassVar[AbstractSet[str]]
-    # a (immutable) set of field names that have a default value
+    """a (immutable) set of field names that have no default value"""
     _optional_keys: ClassVar[AbstractSet[str]]
-    # the default type check style that fillers can use if they have none defined
+    """a (immutable) set of field names that have a default value"""
     _default_type_check_style: ClassVar[TypeCheckStyle]
-    # whether the class is frozen
+    """the default type check style that fillers can use if they have none defined"""
     _frozen: ClassVar[bool]
-    # whether to allow unary parsing in constructor
+    """whether the class is frozen"""
     _unary_parse: ClassVar[bool]
-    # a mutable list of parsers
+    """whether to allow unary parsing in constructor"""
     _parsers: ClassVar[List[Callable]]
-    # whether the class is ordered
+    """a mutable list of parsers"""
     _ordered: ClassVar[bool]
+    """whether the class is ordered"""
 
     def __init_subclass__(cls, *, frozen: bool = False, unary_parse: Optional[bool] = None, ordered=False,
                           default_type_check=TypeCheckStyle.hollow, **kwargs):
@@ -259,6 +261,11 @@ class RecordBase:
         pass
 
     def __repr__(self, **kwargs):
+        """
+        Return ``repr(self)``
+
+        :param kwargs: forwarded to ``self.do_dict`` used to calculate the items to return.
+        """
         params_parts = []
         for name, value in self.to_dict(**kwargs).items():
             params_parts.append(f'{name}={value!r}')
@@ -297,18 +304,19 @@ class RecordBase:
         :param include_defaults: whether to include keys that match the default value.
 
         :param sort: whether to sort the keys of the dictionary numerically. If falsish, the keys will not be sorted.
-        If equal to -1, the items will be sorted in reverse lexicographic order. If callable, the items will be sorted
-        according to ``sort`` as a key. Otherwise, the items will be sorted lexicographically.
-        :param blacklist_tags: A ``Tag`` or set of ``Tag``s to ignore all fields with the ``Tag``.
+         If equal to -1, the items will be sorted in reverse lexicographic order. If callable, the items will be sorted
+         according to ``sort`` as a key. Otherwise, the items will be sorted lexicographically.
+
+        :param blacklist_tags: A `Tag`_ or set of Tags to ignore all fields with the `Tag`_.
 
         :param whitelist_keys: A field name or set of field names to include regardless of ``blacklist`` and
-        ``include_defaults``.
+         ``include_defaults``.
 
-        :param _rev_select: A private `Select`, intended to be applied over the result, the function will attempt to
-        extract the appropriate keys to fit the select
+        :param _rev_select: A private `Select`_, intended to be applied over the result, the function will attempt to
+         extract the appropriate keys to fit the select
 
         :return: A ``dict`` object with key names as specified by ``include_defaults``, ``sort``, ``blacklist_tags``,
-        ``whitelist_keys``, and with values according to ``obj``'s attributes.
+         ``whitelist_keys``, and with values according to ``obj``'s attributes.
 
         :raises AttributeError: if ``obj`` lacks an attribute that has not been blacklisted
         """
@@ -395,7 +403,12 @@ class RecordBase:
         return cls._default_type_check_style
 
     def __hash__(self):
-        # note: if the class is non-frozen, this function will be overridden
+        """
+        :return: ``hash(self)``
+
+        .. note::
+            if the class is non-frozen, this function will be overridden
+        """
         if self._hash is None:
             self._hash = hash(tuple(self.to_dict().values()))
         return self._hash
@@ -502,7 +515,6 @@ class RecordBase:
         """
         return extras.json.load(v, **kwargs)
 
-    @parser
     @classmethod
     def from_pickle(cls, v, *args, **kwargs):
         """
@@ -517,11 +529,8 @@ class RecordBase:
         :return: An unpickled instance of ``cls``.
 
         .. note::
-            If the unpickling result succeeds but the result is nto an instance of ``cls``, then ``cls`` attempts to
-            parse the resulting object.\
-
-        .. note::
-            This class method is a registered parser that will be attempted when calling ``cls.parse``.
+            If the unpickling result succeeds but the result is not an instance of ``cls``, then ``cls`` attempts to
+            parse the resulting object.
         """
         ret = extras.pickle.loads(v, *args, **kwargs)
         if not isinstance(ret, cls):
@@ -583,8 +592,9 @@ class RecordBase:
     def to_dict(v) -> Mapping[str, Any]:
         """
         export an instance to a dictionary.
+
         .. note::
-            This class method supports `selection`_ and `exporting arguments`_.
+            This class method supports selection and exporting arguments.
         """
         return v
 
@@ -645,30 +655,34 @@ class RecordBase:
             ret.append(getattr(self, k))
         return ret
 
-    def check_comparable(self, other):
-        if not type(self)._ordered:
-            raise TypeError(f'cannot compare with non-ordered type {type(self).__qualname__}')
+    @classmethod
+    def _check_comparable(cls):
+        """
+        raise an error if the record does not support comparison
+        """
+        if not cls._ordered:
+            raise TypeError(f'cannot compare with non-ordered type {cls.__qualname__}')
 
     def __lt__(self, other):
-        self.check_comparable(other)
+        self._check_comparable()
         if not isinstance(other, type(self)):
             return NotImplemented
         return self.__ordering_key() < other.__ordering_key()
 
     def __le__(self, other):
-        self.check_comparable(other)
+        self._check_comparable()
         if not isinstance(other, type(self)):
             return NotImplemented
         return self.__ordering_key() <= other.__ordering_key()
 
     def __gt__(self, other):
-        self.check_comparable(other)
+        self._check_comparable()
         if not isinstance(other, type(self)):
             return NotImplemented
         return self.__ordering_key() > other.__ordering_key()
 
     def __ge__(self, other):
-        self.check_comparable(other)
+        self._check_comparable()
         if not isinstance(other, type(self)):
             return NotImplemented
         return self.__ordering_key() >= other.__ordering_key()
