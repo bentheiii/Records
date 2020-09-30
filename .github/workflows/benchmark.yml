@@ -27,3 +27,5 @@ jobs:
       - name: run benchmark
         run: |
           sh scripts/benchmark.sh
+          git add doc/source/benchmark.rst
+          git commit -m "added benchmark.rst"
