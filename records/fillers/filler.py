@@ -175,15 +175,15 @@ class AnnotatedFiller(Filler, Generic[T]):
         self.validators: List[Callable[[T], T]] = []
 
     def fill(self, arg):
-        if self.type_checking_style == TypeCheckStyle.default:  # pragma: no cover
+        if self.type_checking_style is TypeCheckStyle.default:  # pragma: no cover
             raise Exception
-        elif self.type_checking_style == TypeCheckStyle.hollow:
+        elif self.type_checking_style is TypeCheckStyle.hollow:
             tpk = TypePassKind.hollow
         else:
             tp = self.type_check(arg)
-            if tp == TypeMatch.exact:
+            if tp is TypeMatch.exact:
                 tpk = TypePassKind.no_coerce_strict
-            elif tp == TypeMatch.inexact and self.type_checking_style == TypeCheckStyle.check:
+            elif tp is TypeMatch.inexact and self.type_checking_style is TypeCheckStyle.check:
                 tpk = TypePassKind.no_coerce
             else:
                 # perform coercion
@@ -217,6 +217,11 @@ class AnnotatedFiller(Filler, Generic[T]):
             self.type_checking_style = owner_cls.default_type_check_style()
         if self.type_checking_style == TypeCheckStyle.hollow and self.coercers:
             raise ValueError('cannot have hollow type checking with coercers')
+
+    def __call__(self, arg):
+        if self.type_checking_style is TypeCheckStyle.hollow and not self.validators:
+            return arg
+        return super().__call__(arg)
 
     def apply(self, token):
         super().apply(token)

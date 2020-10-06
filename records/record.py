@@ -202,26 +202,23 @@ class RecordBase:
             kwargs[arg_key] = arg
 
         values = {}
-        # keep track of which field are missing
-        required = set(cls._required_keys)
-        optional = set(cls._optional_keys)
+        if not (kwargs.keys() <= cls._fields.keys()):
+            redundant = kwargs.keys() - cls._fields.keys()
+            raise TypeError(f'arguments {redundant} invalid for type {cls.__qualname__}')
+
         try:
             for k, v in kwargs.items():
-                required.discard(k)
-                optional.discard(k)
-                field = cls._fields.get(k)
-                if not field:
-                    raise TypeError(f'argument {k} invalid for type {cls.__qualname__}')
-                values[k] = field.filler(v)
+                values[k] = cls._fields[k].filler(v)
         except Exception:
             # if filling failed, check if we have a parsing standing by
             if parsing is not None:
                 return parsing
             raise
 
-        if required:
+        if not (cls._required_keys <= kwargs.keys()):
+            required = cls._required_keys.difference(kwargs)
             raise TypeError(f'missing required arguments: {tuple(required)}')
-        for k in optional:
+        for k in cls._optional_keys.difference(kwargs):
             values[k] = cls._fields[k].make_default()
 
         self = super().__new__(cls)
