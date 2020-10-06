@@ -4,11 +4,16 @@ Welcome to records's documentation!
     :maxdepth: 2
     :caption: Contents:
 
+    records
     extras
     field
     record
     select
     tags
+    filler
+    builtin_validators
+    builtin_coercers
+    benchmark
 
 
 Indices and tables

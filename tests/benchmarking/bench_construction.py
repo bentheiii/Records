@@ -13,7 +13,7 @@ class REC_Point(RecordBase):
     w: str = ""
 
 
-@bm.measure(source=(REC_Point, ...))
+@bm.measure(source=(REC_Point, ...), highlight=True)
 def new_record():
     REC_Point(x=12, y=3, w="hi")
 

@@ -15,12 +15,17 @@ T = TypeVar('T')
 
 class Eval(GlobalCoercionToken):
     """
-    A coercion token to evaluate a string input as a python expression using `eval`
-    .. warning::
-        evaluating arbitrary strings is always risky!
+    A coercion token to evaluate a string input as a python expression using :py:func:`eval`
+
+    .. warning:: evaluating arbitrary strings is always risky!
     """
 
     def __init__(self, *args, **kwargs):
+        """
+        :param args: Objects to be accessible to the ``eval`` function, by their name. Users can also input
+         :py:data:`Ellipsis` as the first argument to add the target type to the namespace.
+        :param kwargs: Additional names to be accessible to the ``eval`` function.
+        """
         if args and args[0] is ...:
             self.add_bound = True
             args = args[1:]
@@ -51,7 +56,7 @@ class Eval(GlobalCoercionToken):
 
 class LiteralEval(GlobalCoercionToken):
     """
-    A coercion token to evaluate string inputs as literals continuously
+    A coercion token to evaluate string inputs with :py:func:`literal_eval`
     """
 
     def __call__(self, origin, filler):
@@ -76,8 +81,8 @@ class OriginDependant(GlobalCoercionToken, ABC):
 
     def __init__(self, *args, **kwargs):
         """
-        :param args: arguments accessible to the callback
-        :param kwargs: keywords accessible to the callback
+        :param args: arguments forwarded to the callback
+        :param kwargs: keywords forwarded to the callback
         """
         self.args = args
         self.kwargs = kwargs
@@ -171,7 +176,10 @@ class LooseUnpack(LooseMixin):
     def constrain(cls, *items: Union[type, Tuple[type, ...], type(...)]):
         """
         Can be used to constrain LooseUnpack to only accept specific inputs of specific types.
-        :param items: the type or types to constrain inputs by.
+
+        :param items: the type or types to constrain inputs by. If there are exactly two values, and the
+         second is :py:data:`Ellipsis`, the coercion will accept any number of arguments of type *items[0]*.
+
         :return: a factory function to a constrained LooseUnpack token.
         """
         # here we check that the item can indeed by used for type checking

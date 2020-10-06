@@ -234,6 +234,6 @@ class FieldDict(Dict[str, RecordField]):
         Filter the fields in the mapping to only those that have a tag
 
         :param tag: the tag to include
-        :return: a new ``FieldDict`` including only the fields that possess tag_
+        :return: a new :py:class:`FieldDict` including only the fields that possess ``tag``
         """
         return FieldDict((k, f) for (k, f) in self.items() if (tag in f.tags))

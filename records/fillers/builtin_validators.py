@@ -102,10 +102,10 @@ class Within(AssertValidation):
     def __init__(self, ge: Any = least, lt: Any = greatest, g_eq=True, l_eq=False, **kwargs):
         """
         :param ge: the lower bound, defaults to no lower bound
-        :param le: the upper bound, defaults to no upper bound
+        :param lt: the upper bound, defaults to no upper bound
         :param g_eq: whether the lower bound is inclusive, defaults to True.
         :param l_eq: whether the upper bound is inclusive, defaults to False.
-        :param kwargs: forwarded to `AssertValidation`_
+        :param kwargs: forwarded to :py:class:`.AssertValidation`
         """
         super().__init__(**kwargs)
         self.ge = ge
@@ -141,9 +141,10 @@ class FullMatch(AssertValidation):
     def __init__(self, pattern: Union[Pattern, str, bytes], **kwargs):
         """
         :param pattern: either a compiled pattern or an uncompiled string or bytestring
-        :param kwargs: forwarded to `AssertValidation`_
+        :param kwargs: forwarded to :py:class:`.AssertValidation`
+
         .. note::
-            ``pattern`` will be compiled in accordance to `records.extras.re`_
+            ``pattern`` will be compiled in accordance to :py:attr:`records.extras.re`
         """
         super().__init__(**kwargs)
         self.pattern = extras.re.compile(pattern)

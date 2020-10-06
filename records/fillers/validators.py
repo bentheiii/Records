@@ -111,9 +111,12 @@ class CallValidation(GlobalValidationToken, Generic[T]):
         :param func: The callable to use as the validation callback.
         :param args: Optional positional arguments to pass to ``func``, after the validation argument.
         :param kwargs: Optional keyword arguments to pass to ``func``.
+
         .. note::
-            calling ``CallValidation`` with ``args`` or ``kwargs`` is akin to calling it with a `functools.partial`_ as
-             ``func``.
+
+            calling ``CallValidation`` with ``args`` or ``kwargs`` is akin to calling it with a
+            :py:func:`functools.partial` as ``func``.
+
             >>> CallValidation(foo, a, b, c=d)
             >>> # is equivalent to
             >>> CallValidation(lambda v: foo(v, a, b, c=d))
