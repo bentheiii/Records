@@ -73,8 +73,11 @@ class Select:
         combine several Selects into one
 
         :param others: other selects to combine with ``self``
+
         :param kwargs: additional arguments to create a select with, and merge it.
-        :return: ``self``, all of ``others``, and a ``Select`` formed with ``kwargs``, combined into a single ``Select``
+
+        :return: a single :py:class:`Select`, formed by ``self``, all of ``others``, and a :py:class:`Select`
+         formed with ``kwargs``
         """
         if not others and not kwargs:  # pragma: no cover
             raise TypeError('merge must be called with arguments')
@@ -103,7 +106,7 @@ class Select:
         :return: A modified ``Mapping`` as specified by ``self``
 
         .. warning::
-            Any Mapping sent to this function should not be used anywhere else, as this function may modify it.
+            This function may modify ``mapping``.
         """
         # this function may well alter the source mapping
         if not self:
@@ -199,9 +202,12 @@ class SelectableFactory(Generic[T]):
 
         def select(self, *selects: Select, **kwargs):
             """
-            create a new bound factory with a modified ``Select``
-            :param selects: the new `Select`_s to merge into the existing select
-            :param kwargs: keyword argument to merge into the new `Select`_
+            create a new bound factory with a modified :py:class:`.Select`
+
+            :param selects: the new :py:class:`Selects <.Select>` to merge into the existing select
+
+            :param kwargs: keyword argument to merge into the new :py:class:`Selects <.Select>`
+
             :return: a new bound factory
             """
             return type(self)(self.descriptor, self.owner_cls, self.select_.merge(*selects, **kwargs))
@@ -301,9 +307,13 @@ class Exporter(Generic[T]):
         def __init__(self, descriptor: Exporter, owner, export_args, export_kwargs, select):
             """
             :param descriptor: The exporter
+
             :param owner: the owner instance that the object is bound to
+
             :param export_args: the arguments passed to `RecordBase._to_dict`_
+
             :param export_kwargs: the keyword arguments passed to `RecordBase._to_dict`_
+
             :param select: the select to apply
             """
             self.descriptor = descriptor
@@ -319,9 +329,12 @@ class Exporter(Generic[T]):
 
         def select(self, *selects: Select, **kwargs):
             """
-            create a new bound exporter with a modified ``Select``
-            :param selects: the new `Select`_s to merge into the existing select
-            :param kwargs: keyword argument to merge into the new `Select`_
+            create a new bound exporter with a modified :py:class:`.Select`
+
+            :param selects: the new :py:class:`Selects <.Select>` to merge into the existing select
+
+            :param kwargs: keyword argument to merge into the new :py:class:`.Select`
+
             :return: a new bound exporter
             """
             return type(self)(self.descriptor, self.owner, self.export_args, self.export_kwargs,
@@ -330,8 +343,11 @@ class Exporter(Generic[T]):
         def export_with(self, *args, **kwargs):
             """
             create a new bound exporter with modified export arguments
-            :param args: forwarded to `RecordBase._to_dict`_
-            :param kwargs: forwarded to `RecordBase._to_dict`_
+
+            :param args: forwarded to :py:meth:`.RecordBase._to_dict`
+
+            :param kwargs: forwarded to :py:meth:`.RecordBase._to_dict`
+
             :return: a new bound exporter
             """
             return type(self)(self.descriptor, self.owner, (*self.export_args, *args), {**self.export_kwargs, **kwargs},

@@ -3,6 +3,8 @@ record
 
 .. automodule:: records.record
 
+    .. autoattribute:: records.record::exclude_from_ordering
+        :annotation: = Tag(...)
     .. autoexception:: ParseFailure(TypeError)
     .. autodecorator:: parser
 

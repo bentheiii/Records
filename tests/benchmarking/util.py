@@ -46,12 +46,19 @@ class Benchmark:
                     source_lines = getsource(func).splitlines(keepends=True)
                     code_parts.append(''.join(source_lines[1:]))
                 elif callable(s):
-                    code_parts.append(getsource(s))
+                    lines, lnum = getsourcelines(s)
+                    lnum -= 1
+                    last_line = lnum + len(lines) + 1
+                    while lnum > 0:
+                        if not mod_code[lnum - 1].startswith('@'):
+                            break
+                        lnum -= 1
+                    code_parts.append(''.join(mod_code[lnum: last_line]))
                 elif isinstance(s, int):
                     code_parts.append(mod_code[s])
                 else:
                     start, end = s
-                    code_parts.append("\n".join(mod_code[start:end]))
+                    code_parts.append(''.join(mod_code[start:end]))
             code = "\n\n".join(code_parts)
 
             start_time = process_time()
@@ -74,12 +81,12 @@ class Benchmark:
 
     def rst(self):
         ret = [
-            self.name + ':',
+            self.name,
             '=' * (len(self.name) + 1)
         ]
         for m in self.measures:
             ret.extend((
-                m.name + ':',
+                m.name,
                 '-' * (len(m.name) + 1),
                 '.. code-block:: python',
                 ''

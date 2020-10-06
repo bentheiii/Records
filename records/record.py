@@ -22,6 +22,9 @@ except ImportError:
 NO_ARG = object()
 
 exclude_from_ordering = Tag(object())
+"""
+A special tag to exclude a field from ordering, in record classes where ``ordered=True``
+"""
 
 
 def parser(func: Callable):
@@ -310,13 +313,13 @@ class RecordBase:
          If equal to -1, the items will be sorted in reverse lexicographic order. If callable, the items will be sorted
          according to ``sort`` as a key. Otherwise, the items will be sorted lexicographically.
 
-        :param blacklist_tags: A `Tag`_ or set of Tags to ignore all fields with the `Tag`_.
+        :param blacklist_tags: A :py:class:`.Tag` or set of Tags to ignore all fields with the :py:class:`.Tag`.
 
         :param whitelist_keys: A field name or set of field names to include regardless of ``blacklist`` and
          ``include_defaults``.
 
-        :param _rev_select: A private `Select`_, intended to be applied over the result, the function will attempt to
-         extract the appropriate keys to fit the select
+        :param _rev_select: A private :py:class:`.Select`, intended to be applied over the result, the function will
+         attempt to extract the appropriate keys to fit the select
 
         :return: A ``dict`` object with key names as specified by ``include_defaults``, ``sort``, ``blacklist_tags``,
          ``whitelist_keys``, and with values according to ``obj``'s attributes.
@@ -439,7 +442,7 @@ class RecordBase:
         :return: An instance of ``cls`` with arguments as described by the input mappings.
 
         .. note::
-            This class method supports `selection`_.
+            This class method supports :ref:`selection`.
         .. note::
             This class method is a registered parser that will be attempted when calling ``cls.parse``.
         """
@@ -462,7 +465,7 @@ class RecordBase:
         :return: An instance of ``cls`` with arguments as described by the input namespace and mappings.
 
         .. note::
-            This class method supports `selection`_.
+            This class method supports :ref:`selection`.
         .. note::
             If the class is frozen, and there are no additional mappings or kwargs supplied, the method may
             return ``v``.
@@ -495,7 +498,7 @@ class RecordBase:
         :return: An instance of ``cls`` with arguments as described by the JSON.
 
         .. note::
-            This class method supports `selection`_.
+            This class method supports :ref:`selection`.
         .. note::
             This class method is a registered parser that will be attempted when calling ``cls.parse``.
         """
@@ -514,7 +517,7 @@ class RecordBase:
         :return: An instance of ``cls`` with arguments as described by the JSON.
 
         .. note::
-            This class method supports `selection`_.
+            This class method supports :ref:`selection`.
         """
         return extras.json.load(v, **kwargs)
 

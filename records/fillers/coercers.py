@@ -39,9 +39,12 @@ class CallCoercion(GlobalCoercionToken, Generic[T]):
         :param func: The callable to use as the coercion callback.
         :param args: Optional positional arguments to pass to ``func``, after the validation argument.
         :param kwargs: Optional keyword arguments to pass to ``func``.
+
         .. note::
-            calling ``CallCoercion`` with ``args`` or ``kwargs`` is akin to calling it with a `functools.partial`_ as
-             ``func``.
+
+            calling ``CallCoercion`` with ``args`` or ``kwargs`` is akin to calling it with a
+            :py:func:`functools.partial` as ``func``.
+
             >>> CallCoercion(foo, a, b, c=d)
             >>> # is equivalent to
             >>> CallCoercion(lambda v: foo(v, a, b, c=d))
@@ -114,6 +117,7 @@ class ComposeCoercer(GlobalCoercionToken):
     def __init__(self, *inner_coercers: Union[Type[CoercionToken], CoercionToken]):
         """
         :param inner_coercers: an iterable of coercion tokens to apply upon the argument, in reverse order.
+
         .. note::
             the inner coercion callbacks are called in reverse order. So if a token ``A`` will result in callback ``a``,
             and token ``B`` will result in callback ``b``, then the token ``ComposeCoercer(A,B)`` will result in

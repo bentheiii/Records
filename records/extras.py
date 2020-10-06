@@ -8,11 +8,6 @@ decode with `ujson <https://github.com/ultrajson/ultrajson>`_ use the following 
 
 All extras default to their standard library implementations. Any overridden members must fully support the default's
 API.
-
-**Currently supported extras:**
- - `json`_
- - `pickle`_
- - `re`_
 """
 
 import json
