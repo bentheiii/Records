@@ -206,15 +206,21 @@ class RecordBase:
             redundant = kwargs.keys() - cls._fields.keys()
             raise TypeError(f'arguments {redundant} invalid for type {cls.__qualname__}')
 
-        try:
-            for k, v in kwargs.items():
+        for k, v in kwargs.items():
+            try:
                 values[k] = cls._fields[k].filler(v)
-        except Exception:
-            # if filling failed, check if we have a parsing standing by
-            if parsing is not None:
-                return parsing
-            raise
+            except Exception as e:
+                # if filling failed, check if we have a parsing standing by
+                if parsing is not None:
+                    return parsing
+                msg = f'error filling filling {k}'
+                # try to create a parent error of the same type as the original error
+                try:
+                    parent_error = type(e)(msg)
+                except TypeError:
+                    parent_error = ValueError(msg)
 
+                raise parent_error from e
         if not (cls._required_keys <= kwargs.keys()):
             required = cls._required_keys.difference(kwargs)
             raise TypeError(f'missing required arguments: {tuple(required)}')

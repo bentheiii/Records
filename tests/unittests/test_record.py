@@ -4,7 +4,7 @@ from typing import ClassVar, Dict, Hashable, List, Set
 
 from pytest import fixture, mark, raises, skip
 
-from records import Annotated, Factory, RecordBase, Tag
+from records import Annotated, Factory, RecordBase, Tag, check
 from records.select import Select
 
 try:
@@ -337,3 +337,12 @@ def test_get_by_tag():
         c0: Annotated[int, Tag(0)]
 
     assert A._fields.filter_by_tag(Tag(0)) == {'a0': A.a0, 'c0': A.c0}
+
+
+def test_exception_has_field_name():
+    class A(RecordBase, default_type_check=check):
+        field_one: int
+        field_two: str
+
+    with raises(TypeError, match='field_two'):
+        A(field_one=12, field_two=11)
